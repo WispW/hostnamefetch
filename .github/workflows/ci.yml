@@ -156,7 +156,7 @@ jobs:
       - name: Install packaging tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes debhelper devscripts fakeroot lintian
+          sudo apt-get install --yes build-essential debhelper devscripts fakeroot lintian
 
       - name: Build package
         run: packaging/apt/build-deb.sh
