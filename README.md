@@ -58,6 +58,7 @@
 - 常见 Unix 工具：`awk`、`uname`、`df`、`hostname` 等
 - 主要面向 Linux；macOS 做尽量兼容；Windows 通过 Git Bash 可运行，
   但会跳过部分无法采集的信息项。Linux、macOS、Windows 三种系统都在 CI 中跑测试。
+- Windows 另有原生 `hostnamefetch.exe`（Go 实现），不需要 bash / Git Bash / WSL。
 - 信息行不做截断；终端窄于最长信息行时会折行，建议宽度至少 80 列。
 
 ## 安装
@@ -92,6 +93,21 @@ echo "deb [signed-by=/etc/apt/keyrings/wispw.gpg] https://repo.wennie99s.top sta
 sudo apt update
 sudo apt install hostnamefetch
 ```
+
+### Windows（原生 exe）
+
+从 [Releases](https://github.com/WispW/hostnamefetch/releases/latest) 下载
+`hostnamefetch.exe`，在终端里直接运行：
+
+```powershell
+.\hostnamefetch.exe
+```
+
+- 单文件，无需 bash、Git Bash、WSL 或任何运行时
+- 想在任何目录直接调用，把 exe 所在目录加入用户 `PATH`
+- 首次运行可能被 SmartScreen 拦截，选择「更多信息 → 仍要运行」
+- 信息项：Hostname、FQDN、OS、Machine、Kernel、Uptime、Shell、Terminal、
+  Resolution、CPU、GPU、Memory、Local IP、Disk、色块（不显示 Packages / DE / WM）
 
 ## 用法
 

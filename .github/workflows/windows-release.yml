@@ -1,0 +1,71 @@
+name: Publish Windows binary
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Source tag to publish, e.g. v2026.11.21'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.event.release.tag_name || github.event.inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and attach exe
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+
+    env:
+      TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: windows/go.mod
+          cache: false
+
+      - name: Resolve version
+        run: |
+          if (-not $env:TAG) { throw "missing source tag" }
+          $version = $env:TAG -replace '^v', ''
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build
+        working-directory: windows
+        run: |
+          go build -trimpath -ldflags "-s -w -X main.version=$env:VERSION" -o hostnamefetch.exe .
+
+          $reported = & ./hostnamefetch.exe --version
+          Write-Host $reported
+          if ($reported -ne "hostnamefetch $env:VERSION") {
+            throw "version mismatch: expected 'hostnamefetch $env:VERSION', got '$reported'"
+          }
+
+          $rows = & ./hostnamefetch.exe --stdout
+          if ($LASTEXITCODE -ne 0) { throw "--stdout failed" }
+          if (-not ($rows -match '^Hostname: ')) { throw "missing Hostname row" }
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload $env:TAG (Join-Path $PWD 'windows\hostnamefetch.exe') `
+            --repo $env:GITHUB_REPOSITORY `
+            --clobber

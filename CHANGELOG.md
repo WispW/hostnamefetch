@@ -2,6 +2,14 @@
 
 本文件记录各版本的主要变更。
 
+## [未发布]
+
+### 新增
+
+- Windows 原生 `hostnamefetch.exe`（Go 实现）：单文件、无需 Git Bash/WSL，
+  采集 OS/机型/CPU/GPU/内存/分辨率/本地 IP/磁盘/终端/Shell，渲染与 bash 版一致
+- 发布时自动把 exe 附加到对应 Release
+
 ## [v2026.11.21] - 2026-11-21
 
 ### 新增

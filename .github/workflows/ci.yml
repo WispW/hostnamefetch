@@ -41,6 +41,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: windows/go.mod
+          cache: false
+
       - name: Syntax check
         run: |
           bash -n hostnamefetch
@@ -49,6 +55,19 @@ jobs:
 
       - name: Smoke tests
         run: bash tests/smoke.sh
+
+      - name: Go vet and tests
+        working-directory: windows
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Cross-compile Windows binaries
+        working-directory: windows
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$RUNNER_TEMP/hostnamefetch-amd64.exe" .
+          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$RUNNER_TEMP/hostnamefetch-arm64.exe" .
+          ls -l "$RUNNER_TEMP"/hostnamefetch-*.exe
 
   windows:
     name: Windows (PowerShell)
@@ -62,6 +81,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: windows/go.mod
+          cache: false
 
       - name: Environment
         run: |
@@ -86,6 +111,36 @@ jobs:
           if (-not (Test-Path $bash)) { throw "Git Bash not found: $bash" }
           & $bash tests/smoke.sh
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build native exe
+        working-directory: windows
+        run: go build -trimpath -ldflags "-s -w" -o hostnamefetch.exe .
+
+      - name: Native exe smoke tests
+        working-directory: windows
+        run: |
+          $exe = Join-Path $PWD "hostnamefetch.exe"
+
+          & $exe --version
+          if ($LASTEXITCODE -ne 0) { throw "--version failed" }
+
+          $out = & $exe --stdout
+          if ($LASTEXITCODE -ne 0) { throw "--stdout failed" }
+          if (-not ($out -match '^Hostname: ')) { throw "missing Hostname row" }
+          if (-not ($out -match '^OS: Windows ')) { throw "missing OS row" }
+
+          & $exe --layout top --banner_chars ascii | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "top layout failed" }
+
+          & $exe --layout left --disable memory uptime | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "left layout failed" }
+
+          & $exe --bogus 2>$null
+          if ($LASTEXITCODE -ne 1) { throw "invalid option should exit 1" }
+
+          # The assertion above leaves $LASTEXITCODE at 1; without this the
+          # step would inherit that as its own exit code and fail.
+          exit 0
 
   arch:
     name: Arch Linux (container)
