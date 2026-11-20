@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1091,SC2034
+# shellcheck disable=SC1091,SC2034,SC2329
 # SC1091: the sourced path is computed from $0.
 # SC2034: test globals are consumed by the sourced functions.
+# SC2329: system_profiler() is called indirectly by get_resolution/get_gpu.
 # Read-only smoke tests for hostnamefetch.
 #
 # Usage: bash tests/smoke.sh
@@ -143,28 +144,92 @@ readarray -t out_lines < <(print_output)
 [[ ${out_lines[0]} == "b0i0" ]] || fail "top layout should start with the banner"
 
 # ---------------------------------------------------------------------------
+# Review regressions: color 7, macOS cache, memory fallback
+# ---------------------------------------------------------------------------
+
+reset=$'\e[0m'
+[[ $(color 7) == $'\e[0m\e[37m' ]] || fail "color 7 should reset before white"
+[[ $(color 4) == $'\e[0m\e[34m' ]] || fail "color 4 should reset before blue"
+
+# macOS system_profiler must be called only once for resolution + GPU.
+sp_calls=$(mktemp)
+os=macOS
+unset macos_display_info macos_display_info_loaded
+
+system_profiler() {
+    printf 'call\n' >> "$sp_calls"
+    printf 'Resolution: 1920 x 1080\nChipset Model: Test GPU\n'
+}
+
+get_resolution
+get_gpu
+
+calls=$(wc -l < "$sp_calls")
+((calls == 1)) || fail "macOS system_profiler should be called once, got $calls"
+
+unset -f system_profiler
+unset macos_display_info macos_display_info_loaded
+rm -f "$sp_calls"
+
+# Missing MemAvailable must fall back to MemFree + Buffers + Cached.
+meminfo=$(mktemp)
+cat > "$meminfo" <<'MEMINFO'
+MemTotal:       1000000 kB
+MemFree:         400000 kB
+Buffers:         100000 kB
+Cached:          200000 kB
+MEMINFO
+
+os=Linux
+MEMINFO_FILE=$meminfo
+memory=""
+get_memory
+rm -f "$meminfo"
+unset MEMINFO_FILE
+
+[[ $memory == "292MiB / 976MiB (30%)" ]] || \
+    fail "memory fallback mismatch: '$memory'"
+
+# ---------------------------------------------------------------------------
 # CLI smoke tests
 # ---------------------------------------------------------------------------
 
-bash "$root/hostnamefetch" --version >/dev/null || fail "--version failed"
-bash "$root/hostnamefetch" --help >/dev/null || fail "--help failed"
+hf_bash=${BASH:-bash}
 
-bash "$root/hostnamefetch" --stdout | grep -q '^Hostname: ' || \
+"$hf_bash" "$root/hostnamefetch" --version >/dev/null || fail "--version failed"
+"$hf_bash" "$root/hostnamefetch" --help >/dev/null || fail "--help failed"
+
+"$hf_bash" "$root/hostnamefetch" --stdout | grep -q '^Hostname: ' || \
     fail "--stdout output is missing Hostname"
 
-if bash "$root/hostnamefetch" --layout nope >/dev/null 2>&1; then
+if "$hf_bash" "$root/hostnamefetch" --layout nope >/dev/null 2>&1; then
     fail "--layout nope should fail"
 fi
 
-if bash "$root/hostnamefetch" --banner_colors 300 >/dev/null 2>&1; then
+if "$hf_bash" "$root/hostnamefetch" --banner_colors 300 >/dev/null 2>&1; then
     fail "--banner_colors 300 should fail"
 fi
+
+# --disable title must also suppress the underline.
+out=$("$hf_bash" "$root/hostnamefetch" --stdout --disable title --disable cols)
+[[ ${out%%$'\n'*} == Hostname:* ]] || \
+    fail "--disable title should skip the underline"
+
+# Unknown --disable items should warn, not fail.
+err=$("$hf_bash" "$root/hostnamefetch" --stdout --disable typo --disable cols 2>&1 >/dev/null)
+[[ $err == *"unknown --disable item 'typo'"* ]] || \
+    fail "unknown --disable should print a warning"
+
+# Explicit left layout should warn when it falls back to top.
+err=$(COLUMNS=20 "$hf_bash" "$root/hostnamefetch" --layout left --disable cols 2>&1 >/dev/null)
+[[ $err == *"falling back to top"* ]] || \
+    fail "narrow --layout left should warn about the fallback"
 
 # ---------------------------------------------------------------------------
 # Long hostname integration (also runs under Git Bash on Windows)
 # ---------------------------------------------------------------------------
 
-out=$(COLUMNS=80 bash "$root/hostnamefetch" \
+out=$(COLUMNS=80 "$hf_bash" "$root/hostnamefetch" \
     --banner_text "$long_name" \
     --banner_chars ascii \
     --color_text off \
@@ -174,7 +239,7 @@ over=$(printf '%s\n' "$out" | \
     awk 'length($0) > 79 { n++ } END { print n + 0 }')
 ((over == 0)) || fail "top layout overflows 80 columns ($over line(s))"
 
-out=$(COLUMNS=80 bash "$root/hostnamefetch" \
+out=$(COLUMNS=80 "$hf_bash" "$root/hostnamefetch" \
     --banner_text "$long_name" \
     --banner_chars ascii \
     --color_text off \
