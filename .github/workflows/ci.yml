@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ShellCheck
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes shellcheck
+          fi
+          shellcheck hostnamefetch tests/smoke.sh
+
+  ubuntu:
+    name: Ubuntu
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: |
+          bash -n hostnamefetch
+          bash -n tests/smoke.sh
+
+      - name: Smoke tests
+        run: bash tests/smoke.sh
+
+  windows:
+    name: Windows (Git Bash)
+    needs: ubuntu
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Environment
+        run: |
+          bash --version | head -1
+          uname -a
+
+      - name: Syntax check
+        run: |
+          bash -n hostnamefetch
+          bash -n tests/smoke.sh
+
+      - name: Smoke tests
+        run: bash tests/smoke.sh
+
+  arch:
+    name: Arch Linux (container)
+    needs: windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Smoke tests
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/src" \
+            --workdir /src \
+            archlinux:latest \
+            bash -c 'bash -n hostnamefetch && bash -n tests/smoke.sh && bash tests/smoke.sh'

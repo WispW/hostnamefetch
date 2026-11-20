@@ -1,0 +1,1542 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC1090,SC2034
+# SC1090: /etc/os-release is sourced from a dynamic path.
+# SC2034: get_* outputs are read through ${!target} in info().
+# vim: noai:ts=4:sw=4:expandtab
+#
+# hostnamefetch: a neofetch-style system information tool whose "logo" is a
+# banner of your hostname.
+#
+# The system information gathering and the info/logo layout are inspired by
+# and adapted from neofetch 7.1.0 (https://github.com/dylanaraps/neofetch),
+# Copyright (c) 2015-2021 Dylan Araps, licensed under the MIT License.
+# See the LICENSE file for the full license text.
+#
+# hostnamefetch is also licensed under the MIT License.
+
+version="0.1.0"
+
+# Fallback for the edge case where BASH_VERSINFO is unavailable.
+bash_version=${BASH_VERSINFO[0]:-0}
+
+(( bash_version >= 4 )) || {
+    printf '%s\n' "hostnamefetch: bash 4.0 or newer is required." >&2
+    exit 1
+}
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+
+banner=on
+banner_text_override=""
+banner_colors=(auto)
+banner_chars=auto
+banner_spacing=1
+layout=auto
+valign=center
+gap=3
+
+color_text=on
+bold=on
+title_fqdn=off
+color_blocks=on
+block_range=(0 15)
+block_width=3
+block_height=1
+separator=":"
+disable=()
+stdout=off
+os_arch=on
+
+underline_char="-"
+
+# Palette pairs used when --banner_colors is left on "auto". The pair is
+# selected with a checksum of the hostname, so a given machine always gets
+# the same colors.
+banner_palettes=(
+    "4 6"   # blue / cyan
+    "6 4"   # cyan / blue
+    "2 6"   # green / cyan
+    "5 6"   # magenta / cyan
+    "4 5"   # blue / magenta
+    "3 4"   # yellow / blue
+    "1 6"   # red / cyan
+    "6 2"   # cyan / green
+    "5 4"   # magenta / blue
+    "3 6"   # yellow / cyan
+    "2 4"   # green / blue
+    "1 5"   # red / magenta
+)
+
+# ---------------------------------------------------------------------------
+# Banner font
+#
+# A 5x5 block font. Glyphs are stored as five rows separated by "|", using
+# "#" as the fill character. At render time "#" is replaced by the selected
+# fill character (a full block or ASCII "#"). Every glyph is five columns
+# wide, which makes layout and padding calculations trivial.
+# ---------------------------------------------------------------------------
+
+declare -A GLYPHS=()
+
+GLYPHS["A"]=' ### |#   #|#####|#   #|#   #'
+GLYPHS["B"]='#### |#   #|#### |#   #|#### '
+GLYPHS["C"]=' ####|#    |#    |#    | ####'
+GLYPHS["D"]='#### |#   #|#   #|#   #|#### '
+GLYPHS["E"]='#####|#    |#### |#    |#####'
+GLYPHS["F"]='#####|#    |#### |#    |#    '
+GLYPHS["G"]=' ####|#    |#  ##|#   #| ####'
+GLYPHS["H"]='#   #|#   #|#####|#   #|#   #'
+GLYPHS["I"]='#####|  #  |  #  |  #  |#####'
+GLYPHS["J"]='#####|   # |   # |#  # | ##  '
+GLYPHS["K"]='#   #|#  # |###  |#  # |#   #'
+GLYPHS["L"]='#    |#    |#    |#    |#####'
+GLYPHS["M"]='#   #|## ##|# # #|#   #|#   #'
+GLYPHS["N"]='#   #|##  #|# # #|#  ##|#   #'
+GLYPHS["O"]=' ### |#   #|#   #|#   #| ### '
+GLYPHS["P"]='#### |#   #|#### |#    |#    '
+GLYPHS["Q"]=' ### |#   #|# # #|#  # | ## #'
+GLYPHS["R"]='#### |#   #|#### |#  # |#   #'
+GLYPHS["S"]=' ####|#    | ### |    #|#### '
+GLYPHS["T"]='#####|  #  |  #  |  #  |  #  '
+GLYPHS["U"]='#   #|#   #|#   #|#   #| ### '
+GLYPHS["V"]='#   #|#   #|#   #| # # |  #  '
+GLYPHS["W"]='#   #|#   #|# # #|## ##|#   #'
+GLYPHS["X"]='#   #| # # |  #  | # # |#   #'
+GLYPHS["Y"]='#   #| # # |  #  |  #  |  #  '
+GLYPHS["Z"]='#####|   # |  #  | #   |#####'
+
+GLYPHS["0"]=' ### |#  ##|# # #|##  #| ### '
+GLYPHS["1"]='  #  | ##  |  #  |  #  |#####'
+GLYPHS["2"]=' ### |#   #|  ## | #   |#####'
+GLYPHS["3"]='#### |    #| ### |    #|#### '
+GLYPHS["4"]='#  # |#  # |#####|   # |   # '
+GLYPHS["5"]='#####|#    |#### |    #|#### '
+GLYPHS["6"]=' ### |#    |#### |#   #| ### '
+GLYPHS["7"]='#####|   # |  #  | #   | #   '
+GLYPHS["8"]=' ### |#   #| ### |#   #| ### '
+GLYPHS["9"]=' ### |#   #| ####|    #| ### '
+
+GLYPHS["-"]='     |     | ### |     |     '
+GLYPHS["."]='     |     |     |     |  #  '
+GLYPHS["_"]='     |     |     |     |#####'
+GLYPHS[" "]='     |     |     |     |     '
+GLYPHS["?"]=' ### |#   #|  ## |     |  #  '
+GLYPHS["@"]=' ### |#   #|# ###|#    | ### '
+GLYPHS[":"]='     |  #  |     |  #  |     '
+GLYPHS["/"]='    #|   # |  #  | #   |#    '
+GLYPHS["+"]='     |  #  |#####|  #  |     '
+GLYPHS["="]='     |#####|     |#####|     '
+GLYPHS["~"]='     |     | # # |# #  |     '
+
+# ---------------------------------------------------------------------------
+# Small helpers
+# ---------------------------------------------------------------------------
+
+reset=''
+bold_fmt=''
+
+color() {
+    case $1 in
+        [0-6]) printf '%s\e[3%sm' "$reset" "$1" ;;
+        7|fg)  printf '\e[37m%s' "$reset" ;;
+        *)     printf '\e[38;5;%bm' "$1" ;;
+    esac
+}
+
+die() {
+    printf 'hostnamefetch: %s\n' "$1" >&2
+    exit 1
+}
+
+trim() {
+    local s=${1-}
+
+    s=${s//$'\r'/}
+    s=${s//$'\n'/ }
+    s=${s#"${s%%[![:space:]]*}"}
+    s=${s%"${s##*[![:space:]]}"}
+
+    while [[ $s == *"  "* ]]; do
+        s=${s//  / }
+    done
+
+    printf '%s' "$s"
+}
+
+dedupe_list() {
+    # Deduplicate a comma separated list, preserving order.
+    local item out=""
+    local -a parts=()
+
+    IFS=',' read -r -a parts <<< "$1"
+
+    for item in "${parts[@]}"; do
+        item=$(trim "$item")
+        [[ $item ]] || continue
+
+        case ", $out," in
+            *", $item,"*) continue ;;
+        esac
+
+        [[ $out ]] && out+=", "
+        out+=$item
+    done
+
+    printf '%s' "$out"
+}
+
+normalize_name() {
+    local n=${1,,}
+    n=${n//-/_}
+    n=${n// /_}
+    printf '%s' "$n"
+}
+
+check_num() {
+    [[ $1 =~ ^[0-9]+$ ]] || die "expected a number, got '$1'"
+}
+
+check_color() {
+    [[ $1 =~ ^[0-9]{1,3}$ ]] || die "invalid color '$1' (expected 0-255)"
+    (( 10#$1 <= 255 )) || die "invalid color '$1' (expected 0-255)"
+}
+
+check_onoff() {
+    case $1 in
+        on|off) ;;
+        *) die "expected 'on' or 'off', got '$1'" ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# Command line
+# ---------------------------------------------------------------------------
+
+usage() {
+    local line
+
+    while IFS= read -r line; do
+        printf '%s\n' "$line"
+    done <<'EOF'
+Usage: hostnamefetch [options]
+
+A neofetch-style system information tool whose logo is a large banner
+of your hostname.
+
+Options:
+  -h, --help                 Show this help and exit.
+  -v, --version              Print the version and exit.
+
+  --banner <on|off>          Show the hostname banner. Default: on.
+  --banner_text <text>       Render <text> instead of the hostname.
+  --banner_colors <c> [c2]   Banner/label ANSI colors (0-255).
+                             Default: auto (derived from the hostname).
+  --banner_chars <mode>      auto, blocks or ascii. Default: auto.
+  --banner_spacing <0|1>     Space between banner glyphs. Default: 1.
+  --layout <mode>            auto, left or top. Default: auto.
+  --valign <mode>            top or center. Default: center.
+  --gap <num>                Spaces between banner and info. Default: 3.
+
+  --disable <item> [item...] Hide info items. Item names are the variable
+                             names used internally: distro, model, kernel,
+                             uptime, packages, shell, resolution, de, wm,
+                             term, cpu, gpu, memory, local_ip, disk, cols,
+                             title, underline, hostname, fqdn.
+
+  --color_text <on|off>      Color the info text. Default: on.
+  --bold <on|off>            Bold info text and banner. Default: on.
+  --title_fqdn <on|off>      Use the FQDN in the title. Default: off.
+  --color_blocks <on|off>    Show the color palette. Default: on.
+  --block_range <a> <b>      Color block range. Default: 0 15.
+  --block_width <num>        Color block width. Default: 3.
+  --block_height <num>       Color block height. Default: 1.
+  --separator <str>          Label separator. Default: ":".
+  --stdout                   Print plain info only (no banner, no color).
+
+Environment:
+  NO_COLOR                   Disable colored output.
+EOF
+}
+
+get_args() {
+    while (($# > 0)); do
+        case $1 in
+            -h|--help)
+                usage
+                exit 0
+            ;;
+
+            -v|--version)
+                printf 'hostnamefetch %s\n' "$version"
+                exit 0
+            ;;
+
+            --banner)
+                shift
+                check_onoff "${1-}"
+                banner=$1
+                shift
+            ;;
+
+            --banner_text)
+                shift
+                banner_text_override=${1-}
+                shift
+            ;;
+
+            --banner_colors)
+                shift
+                banner_colors=()
+                while (($# > 0)) && [[ $1 != -* ]] && ((${#banner_colors[@]} < 2)); do
+                    check_color "$1"
+                    banner_colors+=("$((10#$1))")
+                    shift
+                done
+                ((${#banner_colors[@]} > 0)) || die "--banner_colors needs at least one color"
+            ;;
+
+            --banner_chars)
+                shift
+                case ${1-} in
+                    auto|blocks|ascii) banner_chars=$1 ;;
+                    *) die "invalid --banner_chars '${1-}' (auto, blocks, ascii)" ;;
+                esac
+                shift
+            ;;
+
+            --banner_spacing)
+                shift
+                check_num "${1-}"
+                banner_spacing=$((10#$1))
+                shift
+            ;;
+
+            --layout)
+                shift
+                case ${1-} in
+                    auto|left|top) layout=$1 ;;
+                    *) die "invalid --layout '${1-}' (auto, left, top)" ;;
+                esac
+                shift
+            ;;
+
+            --valign)
+                shift
+                case ${1-} in
+                    top|center) valign=$1 ;;
+                    *) die "invalid --valign '${1-}' (top, center)" ;;
+                esac
+                shift
+            ;;
+
+            --gap)
+                shift
+                check_num "${1-}"
+                gap=$((10#$1))
+                shift
+            ;;
+
+            --disable)
+                shift
+                local found=0
+                while (($# > 0)) && [[ $1 != -* ]]; do
+                    disable+=("$(normalize_name "$1")")
+                    found=1
+                    shift
+                done
+                ((found)) || die "--disable needs at least one item"
+            ;;
+
+            --color_text)
+                shift
+                check_onoff "${1-}"
+                color_text=$1
+                shift
+            ;;
+
+            --bold)
+                shift
+                check_onoff "${1-}"
+                bold=$1
+                shift
+            ;;
+
+            --title_fqdn)
+                shift
+                check_onoff "${1-}"
+                title_fqdn=$1
+                shift
+            ;;
+
+            --color_blocks)
+                shift
+                check_onoff "${1-}"
+                color_blocks=$1
+                shift
+            ;;
+
+            --block_range)
+                shift
+                check_num "${1-}"
+                check_num "${2-}"
+                block_range=("$((10#$1))" "$((10#$2))")
+                shift 2
+            ;;
+
+            --block_width)
+                shift
+                check_num "${1-}"
+                block_width=$((10#$1))
+                shift
+            ;;
+
+            --block_height)
+                shift
+                check_num "${1-}"
+                block_height=$((10#$1))
+                shift
+            ;;
+
+            --separator)
+                shift
+                separator=${1-}
+                shift
+            ;;
+
+            --stdout)
+                stdout=on
+                shift
+            ;;
+
+            *)
+                die "unknown option '$1' (try --help)"
+            ;;
+        esac
+    done
+
+    ((10#$block_width > 0)) || die "--block_width must be greater than 0"
+    ((10#$block_height > 0)) || die "--block_height must be greater than 0"
+    ((block_range[0] <= block_range[1])) || \
+        die "--block_range start must be <= end"
+    ((block_range[0] <= 255 && block_range[1] <= 255)) || \
+        die "--block_range values must be between 0 and 255"
+    case $banner_spacing in
+        0|1) ;;
+        *) die "--banner_spacing must be 0 or 1" ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# System detection
+# ---------------------------------------------------------------------------
+
+cache_uname() {
+    # uname prints: kernel name, kernel release, machine.
+    IFS=' ' read -r kernel_name kernel_version kernel_machine <<< "$(uname -smr)"
+}
+
+get_os() {
+    case $kernel_name in
+        Linux|GNU*)                       os=Linux ;;
+        Darwin)                           os=macOS ;;
+        FreeBSD|OpenBSD|NetBSD|DragonFly) os=BSD ;;
+        CYGWIN*|MSYS*|MINGW*)             os=Windows ;;
+        *)                                os=$kernel_name ;;
+    esac
+}
+
+windows_version() {
+    # uname -s under Git Bash: MINGW64_NT-10.0-22631
+    local v=${kernel_name#*_NT-}
+    printf '%s' "${v/-/.}"
+}
+
+get_hostname() {
+    hostname=$(hostname -s 2>/dev/null)
+    [[ $hostname ]] || hostname=${HOSTNAME:-$(uname -n 2>/dev/null)}
+    hostname=$(trim "$hostname")
+    [[ $hostname ]] || hostname=unknown
+}
+
+get_fqdn() {
+    fqdn=$(hostname -f 2>/dev/null)
+    fqdn=$(trim "$fqdn")
+
+    # Only show something that is actually a fully qualified name.
+    if [[ $fqdn == "$hostname" || $fqdn != *.* ]]; then
+        fqdn=""
+    fi
+}
+
+get_title() {
+    user=${USER:-$(id -un 2>/dev/null)}
+    [[ $user ]] || user=user
+
+    if [[ $title_fqdn == on && $fqdn ]]; then
+        display_host=$fqdn
+    else
+        display_host=$hostname
+    fi
+
+    title_plain="${user}@${display_host}"
+}
+
+get_distro() {
+    distro=""
+
+    case $os in
+        Linux)
+            local file
+            for file in /etc/os-release /usr/lib/os-release /etc/lsb-release; do
+                [[ -r $file ]] || continue
+                distro=$( . "$file" 2>/dev/null
+                    if [[ $PRETTY_NAME ]]; then
+                        printf '%s' "$PRETTY_NAME"
+                    elif [[ $NAME ]]; then
+                        printf '%s' "$NAME${VERSION_ID:+ $VERSION_ID}"
+                    else
+                        printf '%s' "${DISTRIB_DESCRIPTION:-${DISTRIB_ID:-}}"
+                        printf '%s' "${DISTRIB_RELEASE:+ $DISTRIB_RELEASE}"
+                    fi
+                )
+                [[ $distro ]] && break
+            done
+
+            if [[ ! $distro ]] && command -v lsb_release >/dev/null 2>&1; then
+                distro=$(lsb_release -sd 2>/dev/null)
+            fi
+
+            [[ $distro ]] || distro=$kernel_name
+        ;;
+
+        macOS)
+            distro="macOS $(sw_vers -productVersion 2>/dev/null)"
+        ;;
+
+        Windows)
+            distro="Windows $(windows_version)"
+        ;;
+
+        BSD)
+            distro="$kernel_name $kernel_version"
+        ;;
+
+        *)
+            distro="$os $kernel_version"
+        ;;
+    esac
+
+    distro=$(trim "$distro")
+    distro=${distro//\"/}
+    distro=${distro//\'/}
+
+    [[ $os_arch == on && $kernel_machine ]] && distro+=" $kernel_machine"
+}
+
+get_model() {
+    case $os in
+        Linux)
+            if [[ -d /system/app && -d /system/priv-app ]]; then
+                model="$(getprop ro.product.brand 2>/dev/null)"
+                model+=" $(getprop ro.product.model 2>/dev/null)"
+            else
+                local product_name="" product_version="" board_name=""
+
+                [[ -r /sys/devices/virtual/dmi/id/product_name ]] && \
+                    product_name=$(< /sys/devices/virtual/dmi/id/product_name)
+
+                [[ -r /sys/devices/virtual/dmi/id/product_version ]] && \
+                    product_version=$(< /sys/devices/virtual/dmi/id/product_version)
+
+                [[ -r /sys/devices/virtual/dmi/id/board_name ]] && \
+                    board_name=$(< /sys/devices/virtual/dmi/id/board_name)
+
+                case $(trim "$product_name") in
+                    ""|"System Product Name"|"To Be Filled By O.E.M."|"Default string")
+                        model=$(trim "$board_name")
+                    ;;
+
+                    *)
+                        model=$(trim "$product_name")
+                    ;;
+                esac
+
+                case $(trim "$product_version") in
+                    ""|"System Version"|"To Be Filled By O.E.M."|"Default string") ;;
+                    *) model+=" $(trim "$product_version")" ;;
+                esac
+
+                if [[ ! ${model// } && -r /sys/firmware/devicetree/base/model ]]; then
+                    model=$(< /sys/firmware/devicetree/base/model)
+                fi
+            fi
+        ;;
+
+        macOS|BSD)
+            model=$(sysctl -n hw.model 2>/dev/null)
+        ;;
+    esac
+
+    model=$(trim "$model")
+
+    case $os in
+        Linux|macOS|BSD) model=${model:-Unknown} ;;
+    esac
+}
+
+get_kernel() {
+    if [[ $os == Windows ]]; then
+        kernel=$(windows_version)
+    else
+        kernel=$kernel_version
+    fi
+}
+
+get_uptime() {
+    local s=0 d h m
+    local -a out=()
+
+    case $os in
+        Linux)
+            if [[ -r /proc/uptime ]]; then
+                s=$(< /proc/uptime)
+                s=${s%%.*}
+            fi
+        ;;
+
+        Windows)
+            return
+        ;;
+
+        macOS|BSD)
+            local boot
+            boot=$(sysctl -n kern.boottime 2>/dev/null)
+            boot=${boot#*sec = }
+            boot=${boot%%,*}
+            [[ $boot =~ ^[0-9]+$ ]] && s=$(( $(date +%s) - boot ))
+        ;;
+    esac
+
+    [[ $s =~ ^[0-9]+$ ]] || s=0
+    ((s < 0)) && s=0
+
+    d=$(( s / 86400 ))
+    h=$(( s % 86400 / 3600 ))
+    m=$(( s % 3600 / 60 ))
+
+    if ((d > 0)); then
+        ((d == 1)) && out+=("$d day") || out+=("$d days")
+    fi
+
+    if ((h > 0)); then
+        ((h == 1)) && out+=("$h hour") || out+=("$h hours")
+    fi
+
+    if ((m > 0)); then
+        ((m == 1)) && out+=("$m min") || out+=("$m mins")
+    fi
+
+    if ((${#out[@]} == 0)); then
+        uptime="${s} secs"
+    else
+        local part
+        uptime=""
+        for part in "${out[@]}"; do
+            [[ $uptime ]] && uptime+=", "
+            uptime+=$part
+        done
+    fi
+}
+
+count_packages() {
+    local -a list=()
+    mapfile -t list < <("$@" 2>/dev/null)
+    printf '%s' "${#list[@]}"
+}
+
+get_packages() {
+    local count=0
+    local n=""
+    local m=""
+    local joined=""
+    local -a managers=()
+
+    if command -v pacman >/dev/null 2>&1; then
+        n=$(count_packages pacman -Qq)
+        ((n > 0)) && { count=$((count + n)); managers+=("pacman"); }
+    fi
+
+    if command -v dpkg-query >/dev/null 2>&1; then
+        n=$(count_packages dpkg-query -f '.\n' -W)
+        ((n > 0)) && { count=$((count + n)); managers+=("dpkg"); }
+    fi
+
+    if command -v rpm >/dev/null 2>&1; then
+        n=$(count_packages rpm -qa)
+        ((n > 0)) && { count=$((count + n)); managers+=("rpm"); }
+    fi
+
+    if command -v apk >/dev/null 2>&1; then
+        n=$(count_packages apk info)
+        ((n > 0)) && { count=$((count + n)); managers+=("apk"); }
+    fi
+
+    if command -v xbps-query >/dev/null 2>&1; then
+        n=$(count_packages xbps-query -l)
+        ((n > 0)) && { count=$((count + n)); managers+=("xbps"); }
+    fi
+
+    if command -v opkg >/dev/null 2>&1; then
+        n=$(count_packages opkg list-installed)
+        ((n > 0)) && { count=$((count + n)); managers+=("opkg"); }
+    fi
+
+    if command -v pkg >/dev/null 2>&1; then
+        n=$(count_packages pkg info)
+        ((n > 0)) && { count=$((count + n)); managers+=("pkg"); }
+    fi
+
+    if command -v brew >/dev/null 2>&1; then
+        n=$(count_packages brew list -1)
+        ((n > 0)) && { count=$((count + n)); managers+=("brew"); }
+    fi
+
+    ((count > 0)) || return
+
+    for m in "${managers[@]}"; do
+        [[ $joined ]] && joined+=", "
+        joined+=$m
+    done
+
+    packages="$count ($joined)"
+}
+
+get_shell() {
+    shell=${SHELL:-}
+
+    if [[ ! $shell ]]; then
+        shell=$(getent passwd "${USER:-$(id -un 2>/dev/null)}" 2>/dev/null)
+        shell=${shell##*:}
+    fi
+
+    shell=${shell##*/}
+    [[ $shell ]] || shell=unknown
+}
+
+get_de() {
+    if [[ $os == macOS ]]; then
+        de=Aqua
+        return
+    fi
+
+    local desktop=${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-}}
+    desktop=${desktop,,}
+
+    case $desktop in
+        *gnome*)          de=GNOME ;;
+        *kde*|*plasma*)   de="KDE Plasma" ;;
+        *xfce*)           de=Xfce ;;
+        *cinnamon*)       de=Cinnamon ;;
+        *mate*)           de=MATE ;;
+        *lxqt*)           de=LXQt ;;
+        *lxde*)           de=LXDE ;;
+        *budgie*)         de=Budgie ;;
+        *unity*)          de=Unity ;;
+    esac
+}
+
+get_wm() {
+    if [[ $os == macOS ]]; then
+        wm="Quartz Compositor"
+        return
+    fi
+
+    local desktop=${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-}}
+    desktop=${desktop,,}
+
+    case $desktop in
+        *gnome*)          wm=Mutter ;;
+        *kde*|*plasma*)   wm=KWin ;;
+        *xfce*)           wm=Xfwm4 ;;
+        *cinnamon*)       wm=Muffin ;;
+        *mate*)           wm=Marco ;;
+    esac
+
+    [[ $HYPRLAND_INSTANCE_SIGNATURE ]] && wm=Hyprland
+    [[ $SWAYSOCK ]] && wm=Sway
+
+    if [[ ! $wm && $DISPLAY ]] && command -v xprop >/dev/null 2>&1; then
+        local id
+        id=$(xprop -root -notype _NET_SUPPORTING_WM_CHECK 2>/dev/null)
+        id=${id##* }
+
+        if [[ $id && $id != "0x0" ]]; then
+            wm=$(xprop -id "$id" -notype _NET_WM_NAME 2>/dev/null)
+            wm=${wm#*\"}
+            wm=${wm%\"*}
+        fi
+    fi
+}
+
+get_resolution() {
+    if [[ $os == macOS ]]; then
+        resolution=$(system_profiler SPDisplaysDataType 2>/dev/null | \
+            awk -F': ' '/Resolution/ {print $2; exit}')
+
+    elif [[ $HYPRLAND_INSTANCE_SIGNATURE ]] && command -v hyprctl >/dev/null 2>&1; then
+        resolution=$(hyprctl monitors 2>/dev/null | \
+            awk 'match($0, /[0-9]+x[0-9]+/) {
+                print substr($0, RSTART, RLENGTH)
+                exit
+            }')
+
+    elif [[ $SWAYSOCK ]] && command -v swaymsg >/dev/null 2>&1; then
+        resolution=$(swaymsg -t get_outputs -r 2>/dev/null | \
+            awk -F': ' '/Current mode/ {gsub(/ @.*/, "", $2); printf "%s, ", $2}')
+        resolution=${resolution%, }
+
+    elif [[ $DISPLAY ]] && command -v xrandr >/dev/null 2>&1; then
+        resolution=$(xrandr --nograb --current 2>/dev/null | \
+            awk '/ connected/ {
+                for (i = 1; i <= NF; i++)
+                    if ($i ~ /^[0-9]+x[0-9]+\+/) {
+                        sub(/\+.*/, "", $i)
+                        printf "%s, ", $i
+                    }
+            }')
+        resolution=${resolution%, }
+    fi
+
+    [[ $resolution ]] && resolution=$(dedupe_list "$resolution")
+}
+
+get_term() {
+    if [[ $TERM_PROGRAM ]]; then
+        case $TERM_PROGRAM in
+            iTerm.app)      term=iTerm2 ;;
+            Apple_Terminal) term="Apple Terminal" ;;
+            WezTerm)        term=WezTerm ;;
+            vscode)         term="VS Code" ;;
+            *)              term=${TERM_PROGRAM%.app} ;;
+        esac
+    fi
+
+    [[ $WT_SESSION ]]         && term="Windows Terminal"
+    [[ $KITTY_WINDOW_ID ]]    && term=kitty
+    [[ $ALACRITTY_WINDOW_ID ]] && term=Alacritty
+    [[ $GHOSTTY_RESOURCES_DIR ]] && term=Ghostty
+    [[ $VTE_VERSION && ! $term ]] && term="VTE (${VTE_VERSION})"
+    [[ $SSH_CONNECTION && ! $term ]] && term="SSH (${TERM:-unknown})"
+
+    term=${term:-${TERM:-unknown}}
+}
+
+get_cpu() {
+    local mhz=0 cores=0
+
+    case $os in
+        Linux)
+            # Mirrors neofetch: split on ":" and on " @" so the model name
+            # does not already contain a base clock (e.g. "CPU @ 3.70GHz").
+            cpu=$(awk -F '[[:space:]]*: | @' '
+                /^model name|^Hardware|^Processor|^cpu model|^cpu type/ {
+                    cpu = $2
+                    if ($1 == "Hardware") exit
+                }
+                END { print cpu }
+            ' /proc/cpuinfo 2>/dev/null)
+
+            cores=$(awk '/^processor/ {n++} END {print n + 0}' /proc/cpuinfo 2>/dev/null)
+
+            if [[ -r /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq ]]; then
+                mhz=$(( $(< /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) / 1000 ))
+            elif [[ -r /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq ]]; then
+                mhz=$(( $(< /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq) / 1000 ))
+            else
+                mhz=$(awk -F '[[:space:]]*: | @' \
+                    '/cpu MHz/ {printf "%d", $2; exit}' /proc/cpuinfo 2>/dev/null)
+            fi
+        ;;
+
+        macOS)
+            cpu=$(sysctl -n machdep.cpu.brand_string 2>/dev/null)
+            cores=$(sysctl -n hw.logicalcpu_max 2>/dev/null)
+            mhz=$(sysctl -n hw.cpufrequency_max 2>/dev/null)
+            [[ $mhz =~ ^[0-9]+$ ]] && mhz=$(( mhz / 1000000 ))
+        ;;
+
+        *)
+            return
+        ;;
+    esac
+
+    # Remove vendor noise from the model name, like neofetch does.
+    cpu=$(trim "$cpu")
+    cpu=${cpu//(TM)/}
+    cpu=${cpu//(tm)/}
+    cpu=${cpu//(R)/}
+    cpu=${cpu//(r)/}
+    cpu=${cpu//CPU/}
+    cpu=${cpu//Processor/}
+    cpu=${cpu//Dual-Core/}
+    cpu=${cpu//Quad-Core/}
+    cpu=${cpu//Six-Core/}
+    cpu=${cpu//Eight-Core/}
+    cpu=${cpu//[1-9][0-9]-Core/}
+    cpu=${cpu//[0-9]-Core/}
+    cpu=${cpu//Core / }
+    cpu=${cpu//, altivec supported/}
+    cpu=${cpu//FPU*/}
+    cpu=${cpu//Chip Revision*/}
+    cpu=$(trim "$cpu")
+    [[ $cpu ]] || cpu=Unknown
+
+    [[ $cores =~ ^[0-9]+$ ]] && ((cores > 0)) && cpu+=" ($cores)"
+
+    if [[ $mhz =~ ^[0-9]+$ ]] && ((mhz > 0)); then
+        if ((mhz >= 1000)); then
+            cpu+=" @ $((mhz / 1000)).$((mhz % 1000 / 100))GHz"
+        else
+            cpu+=" @ ${mhz}MHz"
+        fi
+    fi
+}
+
+get_gpu() {
+    if [[ $os == macOS ]]; then
+        gpu=$(system_profiler SPDisplaysDataType 2>/dev/null | \
+            awk -F': ' '/Chipset Model/ {print $2; exit}')
+
+    elif command -v lspci >/dev/null 2>&1; then
+        gpu=$(lspci 2>/dev/null | \
+            awk -F': ' '/VGA compatible controller|3D controller|Display controller/ {
+                gsub(/ \(rev [0-9a-f]+\)/, "", $2)
+                print $2
+                exit
+            }')
+
+        # NVIDIA and AMD expose the useful model name inside brackets.
+        # Intel names are cleaned up like neofetch does.
+        local open='['
+        local close=']'
+
+        case $gpu in
+            *NVIDIA*)
+                gpu=${gpu#*"$open"}
+                gpu=${gpu%%"$close"*}
+                gpu="NVIDIA $(trim "$gpu")"
+            ;;
+
+            *AMD*|*ATI*)
+                gpu=${gpu//\[AMD\/ATI\] /}
+                gpu=${gpu//\[AMD\] /}
+                gpu=${gpu#*"$open"}
+                gpu=${gpu%%"$close"*}
+                gpu="AMD $(trim "$gpu")"
+            ;;
+
+            *Intel*)
+                gpu=${gpu/*Intel/Intel}
+                gpu=${gpu//(R)/}
+                gpu=${gpu//Corporation/}
+                gpu=${gpu%% (*}
+                gpu=$(trim "$gpu")
+            ;;
+        esac
+    fi
+
+    gpu=$(trim "$gpu")
+}
+
+get_memory() {
+    local mem_total=0
+    local mem_used=0
+
+    case $os in
+        Linux)
+            [[ -r /proc/meminfo ]] || return
+
+            local key val mem_avail=0
+
+            while IFS=':' read -r key val; do
+                case $key in
+                    MemTotal)     mem_total=${val//[!0-9]/} ;;
+                    MemAvailable) mem_avail=${val//[!0-9]/} ;;
+                esac
+            done < /proc/meminfo
+
+            mem_used=$(( mem_total - mem_avail ))
+        ;;
+
+        macOS)
+            mem_total=$(( $(sysctl -n hw.memsize 2>/dev/null) / 1024 ))
+
+            local pagesize active wired
+            pagesize=$(vm_stat | awk '/page size of/ {print $8}')
+            active=$(vm_stat | awk '/Pages active/ {gsub(/\./, "", $3); print $3}')
+            wired=$(vm_stat | awk '/Pages wired down/ {gsub(/\./, "", $4); print $4}')
+
+            mem_used=$(( (${active:-0} + ${wired:-0}) * ${pagesize:-4096} / 1024 ))
+        ;;
+
+        *)
+            return
+        ;;
+    esac
+
+    ((mem_total > 0)) || return
+
+    memory="$((mem_used / 1024))MiB / $((mem_total / 1024))MiB ($((mem_used * 100 / mem_total))%)"
+}
+
+get_local_ip() {
+    case $os in
+        Linux)
+            local_ip=$(ip route get 1 2>/dev/null | \
+                awk -F'src' '/src/ {
+                    split($2, a, " ")
+                    print a[1]
+                    exit
+                }')
+
+            [[ $local_ip ]] || local_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+        ;;
+
+        macOS)
+            local_ip=$(ipconfig getifaddr en0 2>/dev/null)
+            [[ $local_ip ]] || local_ip=$(ipconfig getifaddr en1 2>/dev/null)
+        ;;
+
+        BSD)
+            local_ip=$(ifconfig 2>/dev/null | \
+                awk '/inet / && $2 != "127.0.0.1" {print $2; exit}')
+        ;;
+    esac
+}
+
+get_disk() {
+    local total used avail pct
+    read -r _ total used avail pct _ <<< "$(df -hP / 2>/dev/null | awk 'NR==2')"
+
+    [[ $total ]] && disk="${used} / ${total} (${pct})"
+}
+
+# ---------------------------------------------------------------------------
+# Info rows
+#
+# print_info() is intentionally written like a neofetch config: it calls
+# `info <label> <variable>` and the info() helper runs the matching get_*
+# function, formats the row and stores it for the layout pass.
+# ---------------------------------------------------------------------------
+
+INFO_COLORED=()
+INFO_WIDTH=()
+
+is_disabled() {
+    local name=$1
+    local d
+
+    for d in "${disable[@]}"; do
+        [[ $d == "$name" ]] && return 0
+
+        # Friendly aliases.
+        [[ $name == hostname && $d == host ]] && return 0
+        [[ $name == local_ip && $d == ip ]] && return 0
+        [[ $name == distro && $d == os ]] && return 0
+        [[ $name == model && $d == machine ]] && return 0
+    done
+
+    return 1
+}
+
+add_row() {
+    INFO_COLORED+=("$1")
+    INFO_WIDTH+=("$2")
+}
+
+info() {
+    local label=$1
+    local target=${2:-$1}
+
+    is_disabled "$target" && return
+
+    case $label in
+        title)
+            local colored
+            colored="${title_color}${bold_fmt}${user}"
+            colored+="${at_color}@${title_color}${bold_fmt}${display_host}${reset}"
+            add_row "$colored" "${#title_plain}"
+            return
+        ;;
+
+        underline)
+            local n=${#title_plain}
+            local u=""
+
+            if ((n > 0)); then
+                printf -v u '%*s' "$n" ''
+                u=${u// /$underline_char}
+                add_row "${underline_color}${u}${reset}" "$n"
+            fi
+            return
+        ;;
+
+        cols)
+            get_cols
+            return
+        ;;
+    esac
+
+    # Check whether the getter has already run, so expensive getters
+    # (hostname -f, package managers, ...) only run once.
+    if ! declare -p "$target" >/dev/null 2>&1; then
+        "get_${target}"
+    fi
+
+    local value
+    value=$(trim "${!target}")
+
+    [[ ${value// } ]] || return
+
+    if [[ $2 ]]; then
+        local colored
+        colored="${subtitle_color}${bold_fmt}${label}${reset}"
+        colored+="${colon_color}${separator}${reset} ${info_color}${value}${reset}"
+        add_row "$colored" "$(( ${#label} + ${#separator} + 1 + ${#value} ))"
+    else
+        add_row "${info_color}${value}${reset}" "${#value}"
+    fi
+}
+
+get_cols() {
+    [[ $color_text == on && $color_blocks == on ]] || return
+
+    local i line joined_low joined_high
+    local -a low=() high=()
+
+    for ((i = block_range[0]; i <= block_range[1]; i++)); do
+        if ((i <= 7)); then
+            printf -v line '\e[4%dm%*s' "$i" "$block_width" ''
+            low+=("$line")
+        else
+            printf -v line '\e[48;5;%dm%*s' "$i" "$block_width" ''
+            high+=("$line")
+        fi
+    done
+
+    local low_width=$(( ${#low[@]} * block_width ))
+    local high_width=$(( ${#high[@]} * block_width ))
+
+    [[ ${#low[@]} -gt 0 || ${#high[@]} -gt 0 ]] || return
+
+    add_row "" 0
+
+    joined_low=""
+    for line in "${low[@]}"; do joined_low+=$line; done
+
+    joined_high=""
+    for line in "${high[@]}"; do joined_high+=$line; done
+
+    local r
+    for ((r = 0; r < block_height; r++)); do
+        [[ $joined_low ]] && add_row "${joined_low}${reset}" "$low_width"
+        [[ $joined_high ]] && add_row "${joined_high}${reset}" "$high_width"
+    done
+}
+
+print_info() {
+    info title
+    info underline
+
+    info "Hostname" hostname
+    info "FQDN" fqdn
+
+    info "OS" distro
+    info "Machine" model
+    info "Kernel" kernel
+    info "Uptime" uptime
+    info "Packages" packages
+    info "Shell" shell
+
+    info "Resolution" resolution
+    info "DE" de
+    info "WM" wm
+    info "Terminal" term
+
+    info "CPU" cpu
+    info "GPU" gpu
+    info "Memory" memory
+
+    info "Local IP" local_ip
+    info "Disk (/)" disk
+
+    info cols
+}
+
+# ---------------------------------------------------------------------------
+# Colors
+# ---------------------------------------------------------------------------
+
+get_bold() {
+    if [[ $bold == on && $color_text == on ]]; then
+        bold_fmt=$'\e[1m'
+    else
+        bold_fmt=''
+    fi
+}
+
+resolve_palette() {
+    if [[ ${banner_colors[0]} == auto ]]; then
+        local hash scheme
+        hash=$(printf '%s' "$banner_upper" | cksum)
+        hash=${hash%% *}
+        scheme=${banner_palettes[hash % ${#banner_palettes[@]}]}
+        banner_color1=${scheme% *}
+        banner_color2=${scheme#* }
+    else
+        banner_color1=${banner_colors[0]}
+        banner_color2=${banner_colors[1]:-${banner_colors[0]}}
+    fi
+}
+
+set_colors() {
+    if [[ $color_text == on ]]; then
+        reset=$'\e[0m'
+
+        c1="$(color "$banner_color1")${bold_fmt}"
+
+        title_color="$(color "$banner_color1")"
+        at_color="$reset"
+        underline_color="$(color "$banner_color2")"
+        subtitle_color="$(color "$banner_color2")"
+        colon_color="$reset"
+        info_color="$reset"
+    else
+        reset=''
+        bold_fmt=''
+        c1=''
+        title_color=''
+        at_color=''
+        underline_color=''
+        subtitle_color=''
+        colon_color=''
+        info_color=''
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Terminal and charset detection
+# ---------------------------------------------------------------------------
+
+get_term_width() {
+    local width=""
+
+    if [[ -t 1 ]]; then
+        width=$(tput cols 2>/dev/null)
+
+        if [[ ! $width =~ ^[0-9]+$ ]]; then
+            width=$(stty size 2>/dev/null | awk '{print $2}')
+        fi
+    fi
+
+    [[ $width =~ ^[0-9]+$ ]] && ((width > 0)) || width=${COLUMNS:-80}
+    [[ $width =~ ^[0-9]+$ ]] && ((width > 0)) || width=80
+
+    term_width=$width
+}
+
+detect_charset() {
+    local charmap
+    charmap=$(locale charmap 2>/dev/null)
+
+    case $charmap in
+        UTF-8|utf8|UTF8) printf 'blocks'; return ;;
+    esac
+
+    case ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} in
+        *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) printf 'blocks' ;;
+        *)                                printf 'ascii' ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# Banner rendering
+# ---------------------------------------------------------------------------
+
+BANNER_LINES=()
+BANNER_WIDTHS=()
+BANNER_COLORED=()
+BANNER_WIDTH=0
+
+make_banner_chunks() {
+    local max_chars=$1
+    local text=$2
+    local remaining=$text
+    local head cut i
+
+    ((max_chars < 1)) && max_chars=1
+
+    while ((${#remaining} > max_chars)); do
+        head=${remaining:0:max_chars}
+        cut=$max_chars
+
+        # Prefer breaking after a separator so the banner stays readable.
+        for ((i = ${#head} - 1; i > 0; i--)); do
+            case ${head:i:1} in
+                -|.|_|+|/) cut=$((i + 1)); break ;;
+            esac
+        done
+
+        printf '%s\n' "${remaining:0:cut}"
+        remaining=${remaining:cut}
+    done
+
+    printf '%s\n' "$remaining"
+}
+
+render_banner() {
+    local -a chunks=("$@")
+    local chunk line plain
+    local i row ch glyph
+    local idx=0
+    local -a gl=()
+    local -a out=()
+
+    BANNER_LINES=()
+    BANNER_WIDTHS=()
+    BANNER_COLORED=()
+    BANNER_WIDTH=0
+
+    for chunk in "${chunks[@]}"; do
+        # Separate stacked chunks with one empty line.
+        if ((idx++ > 0)); then
+            BANNER_LINES+=("")
+            BANNER_WIDTHS+=("0")
+        fi
+
+        out=("" "" "" "" "")
+
+        for ((i = 0; i < ${#chunk}; i++)); do
+            ch=${chunk:i:1}
+            ch=${ch^^}
+            glyph=${GLYPHS["$ch"]-${GLYPHS["?"]}}
+
+            IFS='|' read -r -a gl <<< "$glyph"
+
+            for row in 0 1 2 3 4; do
+                out[row]+=${gl[row]}
+
+                if ((i < ${#chunk} - 1 && banner_spacing == 1)); then
+                    out[row]+=" "
+                fi
+            done
+        done
+
+        for row in 0 1 2 3 4; do
+            line=${out[row]}
+            line=${line//#/$glyph_fill}
+
+            # Measure the visible width before trimming. Replace the block
+            # character with an ASCII character so the length is correct even
+            # when the script runs in a non-UTF-8 locale.
+            plain=${line//█/#}
+            local width=${#plain}
+
+            ((width > BANNER_WIDTH)) && BANNER_WIDTH=$width
+
+            # Trailing spaces are not needed; the layout pass pads with real
+            # spaces before the info column. Store the width of the trimmed
+            # line so every info row starts at the same column.
+            line=${line%"${line##*[! ]}"}
+            plain=${line//█/#}
+
+            BANNER_LINES+=("$line")
+            BANNER_WIDTHS+=("${#plain}")
+        done
+    done
+
+    local n
+    for ((n = 0; n < ${#BANNER_LINES[@]}; n++)); do
+        if [[ ${BANNER_LINES[n]} ]]; then
+            BANNER_COLORED+=("${c1}${BANNER_LINES[n]}${reset}")
+        else
+            BANNER_COLORED+=("")
+        fi
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+
+print_output() {
+    local i line pad
+    local total
+
+    if [[ $stdout == on || $banner == off ]]; then
+        for line in "${INFO_COLORED[@]}"; do
+            printf '%s\n' "$line"
+        done
+        return
+    fi
+
+    if [[ $layout == left ]]; then
+        local bcount=${#BANNER_COLORED[@]}
+        local icount=${#INFO_COLORED[@]}
+        local b_offset=0
+        local i_offset=0
+        local bi=0
+        local ii=0
+
+        # Center the shorter block against the taller one.
+        if [[ $valign == center ]]; then
+            if ((icount > bcount)); then
+                b_offset=$(( (icount - bcount) / 2 ))
+            elif ((bcount > icount)); then
+                i_offset=$(( (bcount - icount) / 2 ))
+            fi
+        fi
+
+        total=$(( bcount + b_offset > icount + i_offset ? bcount + b_offset : icount + i_offset ))
+
+        for ((i = 0; i < total; i++)); do
+            line=""
+            pad=$((BANNER_WIDTH + gap))
+
+            bi=$((i - b_offset))
+            if ((bi >= 0 && bi < bcount)); then
+                line=${BANNER_COLORED[bi]}
+                pad=$((BANNER_WIDTH + gap - BANNER_WIDTHS[bi]))
+            fi
+
+            ii=$((i - i_offset))
+            if ((ii >= 0 && ii < icount)); then
+                ((pad > 0)) && line+="$(printf '%*s' "$pad" '')"
+                line+=${INFO_COLORED[ii]}
+            fi
+
+            printf '%s\n' "$line"
+        done
+
+    else
+        for line in "${BANNER_COLORED[@]}"; do
+            printf '%s\n' "$line"
+        done
+
+        [[ ${#BANNER_COLORED[@]} -gt 0 ]] && printf '\n'
+
+        for line in "${INFO_COLORED[@]}"; do
+            printf '%s\n' "$line"
+        done
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+main() {
+    cache_uname
+    get_os
+    get_args "$@"
+
+    if [[ $stdout == on ]]; then
+        color_text=off
+        banner=off
+        layout=top
+    fi
+
+    # No escape sequences when stdout is not a terminal.
+    if [[ ! -t 1 ]]; then
+        color_text=off
+        [[ $layout == auto ]] && layout=top
+    fi
+
+    [[ ${NO_COLOR+x} ]] && color_text=off
+
+    get_term_width
+    get_hostname
+    get_fqdn
+    get_title
+
+    # Banner text (uppercase; the built-in font only has uppercase glyphs).
+    banner_raw=${banner_text_override:-$hostname}
+    banner_raw=$(trim "$banner_raw")
+    [[ $banner_raw ]] || banner_raw="hostname"
+    banner_upper=${banner_raw^^}
+
+    resolve_palette
+    get_bold
+    set_colors
+
+    # Pick the fill character.
+    [[ $banner_chars == auto ]] && banner_chars=$(detect_charset)
+
+    case $banner_chars in
+        blocks) glyph_fill='█' ;;
+        ascii)  glyph_fill='#' ;;
+    esac
+
+    INFO_COLORED=()
+    INFO_WIDTH=()
+    print_info
+
+    # Width of the info column.
+    local content_width=0
+    local w
+    for w in "${INFO_WIDTH[@]}"; do
+        ((w > content_width)) && content_width=$w
+    done
+
+    # Width of the unwrapped banner.
+    local banner_full_width=0
+    if [[ $banner == on ]]; then
+        local n=${#banner_upper}
+        ((n > 0)) && banner_full_width=$(( n * 5 + (n - 1) * banner_spacing ))
+    fi
+
+    if [[ $banner == off || $stdout == on ]]; then
+        layout=top
+
+    elif [[ $layout == auto ]]; then
+        if ((banner_full_width + gap + content_width <= term_width - 1)); then
+            layout=left
+        else
+            layout=top
+        fi
+    fi
+
+    # Number of glyphs that fit on one banner line.
+    local avail max_chars=1
+
+    if [[ $layout == left ]]; then
+        avail=$((term_width - 1 - gap - content_width))
+
+        if ((avail < 5)); then
+            layout=top
+        else
+            max_chars=$(( (avail + banner_spacing) / (5 + banner_spacing) ))
+        fi
+    fi
+
+    if [[ $layout == top ]]; then
+        avail=$((term_width - 1))
+        max_chars=$(( (avail + banner_spacing) / (5 + banner_spacing) ))
+    fi
+
+    ((max_chars < 1)) && max_chars=1
+
+    if [[ $banner == on ]]; then
+        local -a chunks=()
+        readarray -t chunks < <(make_banner_chunks "$max_chars" "$banner_upper")
+        render_banner "${chunks[@]}"
+    fi
+
+    print_output
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    main "$@"
+fi

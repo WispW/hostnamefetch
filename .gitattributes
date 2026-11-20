@@ -1,0 +1,6 @@
+* text=auto
+
+# Keep shell scripts LF-only so Git Bash on Windows can run them.
+hostnamefetch text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
