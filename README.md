@@ -41,6 +41,7 @@
 - **内置 5×5 块字体**，不依赖 `figlet` / `toilet`。
 - **自动布局**：终端够宽时横幅在左、信息在右；不够宽时横幅在上、信息在下。
   左布局中横幅默认相对信息列垂直居中，可用 `--valign top` 改回顶部对齐。
+  显式 `--layout left` 在终端过窄时会回退到上下布局并在 stderr 给出警告。
   超长 hostname 会自动分行，并优先在 `-`、`.`、`_`、`+`、`/` 处断开。
 - **自动字符集回退**：UTF-8 终端使用 `█`，非 UTF-8 环境自动改用 `#`。
 - **hostname 派生配色**：默认从 12 组配色中按 hostname 校验和选一组；
@@ -56,7 +57,8 @@
 - `bash` 4.0 及以上
 - 常见 Unix 工具：`awk`、`uname`、`df`、`hostname` 等
 - 主要面向 Linux；macOS 做尽量兼容；Windows 通过 Git Bash 可运行，
-  但会跳过部分无法采集的信息项。三套环境都在 CI 中跑测试。
+  但会跳过部分无法采集的信息项。Linux、macOS、Windows 三种系统都在 CI 中跑测试。
+- 信息行不做截断；终端窄于最长信息行时会折行，建议宽度至少 80 列。
 
 ## 安装
 
@@ -178,19 +180,22 @@ bash tests/smoke.sh
 | Ubuntu | `ubuntu-latest` | 系统 bash + 默认 awk（mawk） |
 | Windows | `windows-latest` | pwsh 调用 Git Bash；`.gitattributes` 保证脚本使用 LF 换行 |
 | Arch Linux | `archlinux:latest` 容器 | 在 Docker 中运行同一套测试 |
+| macOS | `macos-latest` | 安装 bash 5 后运行测试 |
 
-执行顺序固定为 ShellCheck → Ubuntu → Windows → Arch，使用 `needs` 串行；
-任意一步失败，后续 job 会自动跳过。Ubuntu / Windows / Arch 三个 job 先做
-`bash -n` 语法检查，再运行 `tests/smoke.sh`。ShellCheck 直接使用 runner
-预装版本，Ubuntu 和 Windows 不需要额外安装步骤，Arch 只拉取官方基础镜像。测试覆盖：
+执行顺序固定为 ShellCheck → Ubuntu → Windows → Arch → macOS，使用 `needs` 串行；
+任意一步失败，后续 job 会自动跳过。Ubuntu / Windows / Arch / macOS 四个 job 先做
+`bash -n` 语法检查，再运行 `tests/smoke.sh`。ShellCheck 优先使用 runner
+预装版本，缺失时自动安装；Ubuntu 和 Windows 不需要额外准备，Arch 只拉取官方基础镜像，
+macOS 安装 bash 5。测试覆盖：
 
 - 字形尺寸与横幅渲染；
 - 长 hostname 的分块、换行和原文重组；
 - 80 列终端下不溢出、信息列对齐；
-- 垂直居中、CLI 参数校验和 `--stdout` 输出。
+- 垂直居中、CLI 参数校验和 `--stdout` 输出；
+- macOS `system_profiler` 缓存、内存回退与窄终端警告。
 
 如果希望 PR 在任一检查失败时禁止合并，还需要在仓库
-Settings → Branches 中把这四个 job 设为 required status checks；
+Settings → Branches 中把这五个 job 设为 required status checks；
 workflow 本身只负责执行和串联顺序。
 
 ## License
