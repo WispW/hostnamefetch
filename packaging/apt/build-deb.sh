@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Build the hostnamefetch Debian package from a source tag.
+# Build the hostnamefetch Debian package.
 #
 # Usage:
 #   packaging/apt/build-deb.sh [tag]
+#   packaging/apt/build-deb.sh --worktree
 #
-# The source tag is expected to be a CalVer tag such as v2026.11.21.1.
-# debian/changelog on the current branch must match <upstream>-1.
+# With a tag the source is taken from that tag (CalVer, e.g. v2026.11.21.1).
+# With --worktree the current working tree is packaged instead, which lets CI
+# validate a version bump before the tag exists. In both modes debian/changelog
+# must match <upstream>-1.
 # The resulting package is written to packaging/apt/dist/hostnamefetch.deb.
 
 set -euo pipefail
@@ -21,25 +24,40 @@ for cmd in git tar dpkg-buildpackage dpkg-parsechangelog dpkg-deb sha256sum; do
     command -v "$cmd" >/dev/null 2>&1 || die "required command not found: $cmd"
 done
 
-if [[ ${1:-} ]]; then
-    tag=$1
+worktree=off
+tag=''
+
+while (($# > 0)); do
+    case $1 in
+        -w|--worktree)
+            worktree=on
+            shift
+        ;;
+        *)
+            [[ -z $tag ]] || die "unexpected argument: $1"
+            tag=$1
+            shift
+        ;;
+    esac
+done
+
+[[ $worktree == on && -n $tag ]] && die "--worktree cannot be combined with a tag"
+
+if [[ $tag ]]; then
+    [[ $tag =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]] || \
+        die "invalid CalVer tag: $tag"
+    upstream=${tag#v}
 else
-    version=$(sed -n 's/^version="\(.*\)"$/\1/p' "$root/hostnamefetch" | head -n1)
-    [[ $version ]] || die "cannot read version from hostnamefetch"
-    tag="v$version"
+    upstream=$(sed -n 's/^version="\(.*\)"$/\1/p' "$root/hostnamefetch" | head -n1)
+    [[ $upstream ]] || die "cannot read version from hostnamefetch"
+    [[ $upstream =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]] || \
+        die "invalid version in hostnamefetch: $upstream"
 fi
 
-[[ $tag =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]] || \
-    die "invalid CalVer tag: $tag"
-
-upstream=${tag#v}
 expected_version="${upstream}-1"
 changelog_version=$(dpkg-parsechangelog -l "$root/debian/changelog" -SVersion)
 [[ $changelog_version == "$expected_version" ]] || \
     die "debian/changelog has $changelog_version, expected $expected_version"
-
-git -C "$root" rev-parse --verify --quiet "$tag^{commit}" >/dev/null || \
-    die "tag does not exist: $tag"
 
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
@@ -50,8 +68,22 @@ source_dir="$workdir/source"
 
 mkdir -p "$upstream_dir" "$source_dir"
 
-git -C "$root" archive --format=tar --prefix="$source_name/" "$tag" | \
-    tar -x -C "$upstream_dir"
+if [[ $worktree == on ]]; then
+    mkdir -p "$upstream_dir/$source_name"
+    tar -C "$root" -cf - \
+        --exclude=./.git \
+        --exclude=./.cache \
+        --exclude=./packaging/apt/dist \
+        --exclude=./windows/hostnamefetch.exe \
+        . | tar -x -C "$upstream_dir/$source_name"
+else
+    git -C "$root" rev-parse --verify --quiet "$tag^{commit}" >/dev/null || \
+        die "tag does not exist: $tag"
+
+    git -C "$root" archive --format=tar --prefix="$source_name/" "$tag" | \
+        tar -x -C "$upstream_dir"
+fi
+
 rm -rf "$upstream_dir/$source_name/debian"
 
 tar -C "$upstream_dir" -czf "$source_dir/hostnamefetch_${upstream}.orig.tar.gz" \
