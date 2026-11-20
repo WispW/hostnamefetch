@@ -1,0 +1,10 @@
+AGENTS.md
+
+# Generated AUR packaging files; the AUR repository is the source of truth.
+packaging/aur/PKGBUILD
+packaging/aur/.SRCINFO
+packaging/aur/src/
+packaging/aur/pkg/
+packaging/aur/*.pkg.tar.*
+packaging/aur/hostnamefetch-*
+packaging/aur/LICENSE-*

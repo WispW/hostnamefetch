@@ -1,0 +1,26 @@
+# Maintainer: WispW <wispw@users.noreply.github.com>
+
+pkgname=hostnamefetch
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc='Neofetch-style system info tool whose logo is a hostname banner'
+arch=('any')
+url='https://github.com/WispW/hostnamefetch'
+license=('MIT')
+depends=('bash' 'coreutils' 'gawk')
+optdepends=(
+    'pciutils: GPU information'
+    'iproute2: local IP'
+    'inetutils: hostname command'
+    'xorg-xrandr: resolution'
+)
+source=(
+    "hostnamefetch-$pkgver::https://raw.githubusercontent.com/WispW/hostnamefetch/v$pkgver/hostnamefetch"
+    "LICENSE-$pkgver::https://raw.githubusercontent.com/WispW/hostnamefetch/v$pkgver/LICENSE"
+)
+sha256sums=('@SHA256_SCRIPT@' '@SHA256_LICENSE@')
+
+package() {
+    install -Dm755 "$srcdir/hostnamefetch-$pkgver" "$pkgdir/usr/bin/hostnamefetch"
+    install -Dm644 "$srcdir/LICENSE-$pkgver" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

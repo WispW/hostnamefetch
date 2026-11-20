@@ -1,0 +1,62 @@
+name: AUR
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'CalVer tag to publish, e.g. v2026.11.21'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aur-${{ github.event.release.tag_name || github.event.inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  aur:
+    name: Publish to AUR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up SSH
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          test -n "$AUR_SSH_PRIVATE_KEY" || {
+            echo "AUR_SSH_PRIVATE_KEY secret is missing" >&2
+            exit 1
+          }
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+
+          cat > ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            IdentitiesOnly yes
+            BatchMode yes
+            User aur
+          EOF
+          chmod 600 ~/.ssh/config
+
+          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
+
+      - name: Update AUR package
+        env:
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+          GIT_TERMINAL_PROMPT: '0'
+          AUR_GIT_NAME: ${{ secrets.AUR_GIT_NAME }}
+          AUR_GIT_EMAIL: ${{ secrets.AUR_GIT_EMAIL }}
+        run: packaging/aur/update.sh "$TAG" --push

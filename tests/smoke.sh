@@ -274,6 +274,21 @@ aligned=$(printf '%s\n' "$out" | \
 ((aligned > 0)) || fail "left layout info column is not aligned"
 
 # ---------------------------------------------------------------------------
+# AUR packaging template/script sanity
+# ---------------------------------------------------------------------------
+
+grep -q '@PKGVER@' "$root/packaging/aur/PKGBUILD.in" || \
+    fail "PKGBUILD.in is missing the @PKGVER@ placeholder"
+grep -q '@SHA256_SCRIPT@' "$root/packaging/aur/PKGBUILD.in" || \
+    fail "PKGBUILD.in is missing the @SHA256_SCRIPT@ placeholder"
+grep -q '@SHA256_LICENSE@' "$root/packaging/aur/PKGBUILD.in" || \
+    fail "PKGBUILD.in is missing the @SHA256_LICENSE@ placeholder"
+
+if "$hf_bash" "$root/packaging/aur/update.sh" not-a-tag >/dev/null 2>&1; then
+    fail "update.sh should reject an invalid tag"
+fi
+
+# ---------------------------------------------------------------------------
 
 printf '%s\n' "----"
 

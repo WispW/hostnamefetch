@@ -74,6 +74,8 @@ mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/WispW/host
 curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21/hostnamefetch | bash
 ```
 
+AUR 打包与自动发布流程见 [`packaging/aur/README.md`](packaging/aur/README.md)。
+
 > `v2026.11.21` tag 在 PR 合并后发布；在此之前可以把 URL 中的 tag 换成 `main`。
 
 ## 用法
