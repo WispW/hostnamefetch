@@ -76,6 +76,23 @@ curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21/hos
 
 > `v2026.11.21` tag 在 PR 合并后发布；在此之前可以把 URL 中的 tag 换成 `main`。
 
+### Debian/Ubuntu（APT）
+
+已提供第三方 APT 源：<https://repo.wennie99s.top>
+
+```sh
+sudo install -d -m 0755 /etc/apt/keyrings
+
+curl -fsSL https://repo.wennie99s.top/wispw-archive-keyring.gpg \
+  | sudo tee /etc/apt/keyrings/wispw.gpg >/dev/null
+
+echo "deb [signed-by=/etc/apt/keyrings/wispw.gpg] https://repo.wennie99s.top stable main" \
+  | sudo tee /etc/apt/sources.list.d/wispw.list
+
+sudo apt update
+sudo apt install hostnamefetch
+```
+
 ## 用法
 
 ```text
