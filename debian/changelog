@@ -1,3 +1,9 @@
+hostnamefetch (2026.11.21.1-1) unstable; urgency=medium
+
+  * Add native Windows build (hostnamefetch.exe).
+
+ -- WispW <wispw@users.noreply.github.com>  Sat, 21 Nov 2026 12:00:00 +0000
+
 hostnamefetch (2026.11.21-1) unstable; urgency=medium
 
   * Initial APT packaging.

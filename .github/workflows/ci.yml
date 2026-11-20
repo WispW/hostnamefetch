@@ -214,7 +214,7 @@ jobs:
           sudo apt-get install --yes build-essential debhelper devscripts fakeroot lintian
 
       - name: Build package
-        run: packaging/apt/build-deb.sh
+        run: packaging/apt/build-deb.sh --worktree
 
       - name: Lint package
         run: lintian packaging/apt/dist/hostnamefetch.deb

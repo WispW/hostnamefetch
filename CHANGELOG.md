@@ -4,6 +4,10 @@
 
 ## [未发布]
 
+- 暂无
+
+## [v2026.11.21.1] - 2026-11-21
+
 ### 新增
 
 - Windows 原生 `hostnamefetch.exe`（Go 实现）：单文件、无需 Git Bash/WSL，
