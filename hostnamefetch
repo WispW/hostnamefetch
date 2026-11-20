@@ -1537,6 +1537,8 @@ main() {
     print_output
 }
 
-if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+# Run when executed as a script (including `curl ... | bash`), but not when
+# sourced by the test suite. BASH_SOURCE is empty when bash reads stdin.
+if [[ ${BASH_SOURCE[0]:-} == "$0" || -z ${BASH_SOURCE[0]:-} ]]; then
     main "$@"
 fi
