@@ -4,7 +4,7 @@
 # Usage:
 #   packaging/apt/build-deb.sh [tag]
 #
-# The source tag is expected to be a CalVer tag such as v2026.11.21.
+# The source tag is expected to be a CalVer tag such as v2026.11.21.1.
 # debian/changelog on the current branch must match <upstream>-1.
 # The resulting package is written to packaging/apt/dist/hostnamefetch.deb.
 

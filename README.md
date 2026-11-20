@@ -66,16 +66,16 @@
 一条命令安装到 `~/.local/bin`（需要该目录在 `PATH` 中）：
 
 ```sh
-mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21/hostnamefetch -o ~/.local/bin/hostnamefetch && chmod +x ~/.local/bin/hostnamefetch
+mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21.1/hostnamefetch -o ~/.local/bin/hostnamefetch && chmod +x ~/.local/bin/hostnamefetch
 ```
 
 不安装、直接通过管道运行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21/hostnamefetch | bash
+curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21.1/hostnamefetch | bash
 ```
 
-> `v2026.11.21` tag 在 PR 合并后发布；在此之前可以把 URL 中的 tag 换成 `main`。
+> `v2026.11.21.1` 是当前版本 tag；在发布前可把 URL 中的 tag 换成 `main`。
 
 ### Debian/Ubuntu（APT）
 
