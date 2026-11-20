@@ -1,0 +1,100 @@
+name: Publish APT package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Source tag to publish, e.g. v2026.11.21'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apt-publish-${{ github.event.release.tag_name || github.event.inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  APT_REPO: WispW/wispw-apt
+
+jobs:
+  publish:
+    name: Build and publish package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential debhelper devscripts fakeroot lintian
+
+      - name: Build Debian package
+        env:
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        run: |
+          test -n "$TAG" || { echo "missing source tag" >&2; exit 1; }
+          packaging/apt/build-deb.sh "$TAG"
+
+      - name: Lint package
+        run: lintian packaging/apt/dist/hostnamefetch.deb
+
+      - name: Test package install
+        run: |
+          docker run --rm -v "$PWD/packaging/apt/dist:/dist:ro" ubuntu:latest \
+            bash -c 'apt-get update -qq && \
+              apt-get install -y -qq --no-install-recommends /dist/hostnamefetch.deb >/dev/null && \
+              hostnamefetch --version'
+
+      - name: Publish to WispW APT
+        env:
+          GH_TOKEN: ${{ secrets.WISPW_APT_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        run: |
+          test -n "$GH_TOKEN" || {
+            echo "WISPW_APT_TOKEN secret is missing" >&2
+            exit 1
+          }
+
+          version=$(dpkg-deb -f packaging/apt/dist/hostnamefetch.deb Version)
+          sha256=$(sha256sum packaging/apt/dist/hostnamefetch.deb | awk '{print $1}')
+          apt_tag="hostnamefetch-v${version}"
+          notes="$RUNNER_TEMP/release-notes.txt"
+
+          cat > "$notes" <<EOF
+          Package: hostnamefetch
+          Version: $version
+          SHA256: $sha256
+          EOF
+
+          if gh release view "$apt_tag" --repo "$APT_REPO" >/dev/null 2>&1; then
+            gh release upload "$apt_tag" \
+              packaging/apt/dist/hostnamefetch.deb \
+              --repo "$APT_REPO" --clobber
+            gh release edit "$apt_tag" \
+              --repo "$APT_REPO" \
+              --notes-file "$notes" \
+              --draft=false
+          else
+            gh release create "$apt_tag" \
+              --repo "$APT_REPO" \
+              --draft \
+              --title "hostnamefetch $version" \
+              --notes-file "$notes"
+            gh release upload "$apt_tag" \
+              packaging/apt/dist/hostnamefetch.deb \
+              --repo "$APT_REPO" --clobber
+            gh release edit "$apt_tag" \
+              --repo "$APT_REPO" \
+              --draft=false
+          fi
+
+          printf 'published: https://github.com/%s/releases/tag/%s\n' "$APT_REPO" "$apt_tag"

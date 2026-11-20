@@ -1,0 +1,21 @@
+Source: hostnamefetch
+Section: utils
+Priority: optional
+Maintainer: WispW <wispw@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://github.com/WispW/hostnamefetch
+
+Package: hostnamefetch
+Architecture: all
+Depends: ${misc:Depends},
+         bash (>= 4.0)
+Recommends: iproute2,
+            pciutils,
+            x11-xserver-utils
+Description: neofetch-style system information tool with a hostname banner
+ hostnamefetch displays system information next to a five-line banner
+ rendered from the local hostname.
+ .
+ It is a single bash script and does not require a build step.

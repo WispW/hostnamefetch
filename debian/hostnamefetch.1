@@ -1,0 +1,45 @@
+.TH HOSTNAMEFETCH 1 "2026-11-21" "hostnamefetch 2026.11.21" "User Commands"
+.SH NAME
+hostnamefetch \- neofetch-style system information with a hostname banner
+.SH SYNOPSIS
+.B hostnamefetch
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B hostnamefetch
+prints system information next to a five-line banner rendered from the
+local hostname.
+.PP
+It is a single Bash script and does not require a build step.
+.SH OPTIONS
+.TP
+.B \-\-help
+Show usage information.
+.TP
+.B \-\-version
+Show the version.
+.TP
+.B \-\-stdout
+Print the report instead of drawing it interactively.
+.TP
+.BI \-\-banner " on|off"
+Enable or disable the hostname banner.
+.TP
+.BI \-\-banner_text " TEXT"
+Render a custom banner instead of the local hostname.
+.TP
+.BI \-\-banner_chars " CHARSET"
+Select the banner character set.
+.TP
+.BI \-\-layout " MODE"
+Select the layout mode.
+.TP
+.BI \-\-disable " ITEM"
+Disable an information item.
+.SH FILES
+.TP
+.I /etc/os-release
+Distribution information.
+.SH HOMEPAGE
+https://github.com/WispW/hostnamefetch
+.SH LICENSE
+MIT
