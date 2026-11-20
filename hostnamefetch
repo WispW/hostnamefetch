@@ -14,7 +14,7 @@
 #
 # hostnamefetch is also licensed under the MIT License.
 
-version="0.1.0"
+version="2026.11.21"
 
 # Fallback for the edge case where BASH_VERSINFO is unavailable.
 bash_version=${BASH_VERSINFO[0]:-0}
@@ -140,7 +140,7 @@ bold_fmt=''
 color() {
     case $1 in
         [0-6]) printf '%s\e[3%sm' "$reset" "$1" ;;
-        7|fg)  printf '\e[37m%s' "$reset" ;;
+        7|fg)  printf '%s\e[37m' "$reset" ;;
         *)     printf '\e[38;5;%bm' "$1" ;;
     esac
 }
@@ -148,6 +148,10 @@ color() {
 die() {
     printf 'hostnamefetch: %s\n' "$1" >&2
     exit 1
+}
+
+warn() {
+    printf 'hostnamefetch: warning: %s\n' "$1" >&2
 }
 
 trim() {
@@ -341,11 +345,21 @@ get_args() {
             --disable)
                 shift
                 local found=0
+                local item
+
                 while (($# > 0)) && [[ $1 != -* ]]; do
-                    disable+=("$(normalize_name "$1")")
+                    item=$(normalize_name "$1")
+
+                    if valid_disable_name "$item"; then
+                        disable+=("$item")
+                    else
+                        warn "unknown --disable item '$1' (ignored)"
+                    fi
+
                     found=1
                     shift
                 done
+
                 ((found)) || die "--disable needs at least one item"
             ;;
 
@@ -780,9 +794,18 @@ get_wm() {
     fi
 }
 
+get_macos_display_info() {
+    [[ ${macos_display_info_loaded:-} ]] && return
+
+    macos_display_info=$(system_profiler SPDisplaysDataType 2>/dev/null)
+    macos_display_info_loaded=1
+}
+
 get_resolution() {
     if [[ $os == macOS ]]; then
-        resolution=$(system_profiler SPDisplaysDataType 2>/dev/null | \
+        get_macos_display_info
+
+        resolution=$(printf '%s\n' "$macos_display_info" | \
             awk -F': ' '/Resolution/ {print $2; exit}')
 
     elif [[ $HYPRLAND_INSTANCE_SIGNATURE ]] && command -v hyprctl >/dev/null 2>&1; then
@@ -906,7 +929,9 @@ get_cpu() {
 
 get_gpu() {
     if [[ $os == macOS ]]; then
-        gpu=$(system_profiler SPDisplaysDataType 2>/dev/null | \
+        get_macos_display_info
+
+        gpu=$(printf '%s\n' "$macos_display_info" | \
             awk -F': ' '/Chipset Model/ {print $2; exit}')
 
     elif command -v lspci >/dev/null 2>&1; then
@@ -956,16 +981,25 @@ get_memory() {
 
     case $os in
         Linux)
-            [[ -r /proc/meminfo ]] || return
+            local meminfo=${MEMINFO_FILE:-/proc/meminfo}
+            [[ -r $meminfo ]] || return
 
-            local key val mem_avail=0
+            local key val mem_avail=0 mem_free=0 mem_buffers=0 mem_cached=0
 
             while IFS=':' read -r key val; do
                 case $key in
                     MemTotal)     mem_total=${val//[!0-9]/} ;;
                     MemAvailable) mem_avail=${val//[!0-9]/} ;;
+                    MemFree)      mem_free=${val//[!0-9]/} ;;
+                    Buffers)      mem_buffers=${val//[!0-9]/} ;;
+                    Cached)       mem_cached=${val//[!0-9]/} ;;
                 esac
-            done < /proc/meminfo
+            done < "$meminfo"
+
+            # MemAvailable is accurate on modern kernels. Fall back to the
+            # classic approximation when the field is missing.
+            ((mem_avail == 0)) && \
+                mem_avail=$((mem_free + mem_buffers + mem_cached))
 
             mem_used=$(( mem_total - mem_avail ))
         ;;
@@ -1034,6 +1068,23 @@ get_disk() {
 INFO_COLORED=()
 INFO_WIDTH=()
 
+valid_disable_name() {
+    case $1 in
+        title|underline|hostname|fqdn|distro|model|kernel|uptime|packages|shell)
+            return 0
+        ;;
+        resolution|de|wm|term|cpu|gpu|memory|local_ip|disk|cols)
+            return 0
+        ;;
+        # Friendly aliases.
+        host|os|machine|ip)
+            return 0
+        ;;
+    esac
+
+    return 1
+}
+
 is_disabled() {
     local name=$1
     local d
@@ -1072,6 +1123,9 @@ info() {
         ;;
 
         underline)
+            # The underline belongs to the title; hide it with the title.
+            is_disabled title && return
+
             local n=${#title_plain}
             local u=""
 
@@ -1515,6 +1569,7 @@ main() {
         avail=$((term_width - 1 - gap - content_width))
 
         if ((avail < 5)); then
+            warn "terminal too narrow for --layout left; falling back to top layout"
             layout=top
         else
             max_chars=$(( (avail + banner_spacing) / (5 + banner_spacing) ))
