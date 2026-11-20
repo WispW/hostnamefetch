@@ -50,13 +50,13 @@ jobs:
         run: bash tests/smoke.sh
 
   windows:
-    name: Windows (Git Bash)
+    name: Windows (PowerShell)
     needs: ubuntu
     runs-on: windows-latest
     timeout-minutes: 10
     defaults:
       run:
-        shell: bash
+        shell: pwsh
 
     steps:
       - name: Checkout
@@ -64,16 +64,27 @@ jobs:
 
       - name: Environment
         run: |
-          bash --version | head -1
-          uname -a
+          $bash = Join-Path $env:ProgramFiles "Git\bin\bash.exe"
+          if (-not (Test-Path $bash)) { throw "Git Bash not found: $bash" }
+          & $bash --version
+          & $bash -c 'uname -a'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Syntax check
         run: |
-          bash -n hostnamefetch
-          bash -n tests/smoke.sh
+          $bash = Join-Path $env:ProgramFiles "Git\bin\bash.exe"
+          if (-not (Test-Path $bash)) { throw "Git Bash not found: $bash" }
+          & $bash -n hostnamefetch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $bash -n tests/smoke.sh
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Smoke tests
-        run: bash tests/smoke.sh
+        run: |
+          $bash = Join-Path $env:ProgramFiles "Git\bin\bash.exe"
+          if (-not (Test-Path $bash)) { throw "Git Bash not found: $bash" }
+          & $bash tests/smoke.sh
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   arch:
     name: Arch Linux (container)
