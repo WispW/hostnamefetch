@@ -190,6 +190,21 @@ unset MEMINFO_FILE
 [[ $memory == "292MiB / 976MiB (30%)" ]] || \
     fail "memory fallback mismatch: '$memory'"
 
+# macOS df -P reports 512-byte blocks; get_disk must use human-readable -h.
+os=macOS
+df() {
+    printf '%s\n' 'Filesystem Size Used Avail Capacity Mounted on'
+    printf '%s\n' '/dev/disk3s1s1 460Gi 9.7Gi 296Gi 4% /'
+}
+
+disk=""
+get_disk
+unset -f df
+os=Linux
+
+[[ $disk == "9.7Gi / 460Gi (4%)" ]] || \
+    fail "macOS disk output mismatch: '$disk'"
+
 # ---------------------------------------------------------------------------
 # CLI smoke tests
 # ---------------------------------------------------------------------------

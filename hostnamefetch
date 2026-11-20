@@ -1052,7 +1052,13 @@ get_local_ip() {
 
 get_disk() {
     local total used avail pct
-    read -r _ total used avail pct _ <<< "$(df -hP / 2>/dev/null | awk 'NR==2')"
+
+    # macOS/BSD `df -P` reports 512-byte blocks even with -h; use -h alone.
+    if [[ $os == macOS || $os == BSD ]]; then
+        read -r _ total used avail pct _ <<< "$(df -h / 2>/dev/null | awk 'NR==2')"
+    else
+        read -r _ total used avail pct _ <<< "$(df -hP / 2>/dev/null | awk 'NR==2')"
+    fi
 
     [[ $total ]] && disk="${used} / ${total} (${pct})"
 }
