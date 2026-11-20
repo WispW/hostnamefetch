@@ -39,6 +39,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: windows/go.mod
+          cache: false
 
       - name: Resolve version
         run: |

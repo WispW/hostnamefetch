@@ -45,6 +45,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: windows/go.mod
+          cache: false
 
       - name: Syntax check
         run: |
@@ -85,6 +86,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: windows/go.mod
+          cache: false
 
       - name: Environment
         run: |
@@ -135,6 +137,10 @@ jobs:
 
           & $exe --bogus 2>$null
           if ($LASTEXITCODE -ne 1) { throw "invalid option should exit 1" }
+
+          # The assertion above leaves $LASTEXITCODE at 1; without this the
+          # step would inherit that as its own exit code and fail.
+          exit 0
 
   arch:
     name: Arch Linux (container)
