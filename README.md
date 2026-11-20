@@ -75,7 +75,7 @@ mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/WispW/host
 curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21.1/hostnamefetch | bash
 ```
 
-> `v2026.11.21.1` 是当前版本 tag；在发布前可把 URL 中的 tag 换成 `main`。
+> `v2026.11.21.1` 在发版时创建；在此之前可把 URL 中的 tag 换成 `main`。
 
 ### Debian/Ubuntu（APT）
 

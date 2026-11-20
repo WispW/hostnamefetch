@@ -73,6 +73,7 @@ if [[ $worktree == on ]]; then
     tar -C "$root" -cf - \
         --exclude=./.git \
         --exclude=./.cache \
+        --exclude=./AGENTS.md \
         --exclude=./packaging/apt/dist \
         --exclude=./windows/hostnamefetch.exe \
         . | tar -x -C "$upstream_dir/$source_name"
