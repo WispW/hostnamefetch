@@ -60,23 +60,19 @@
 
 ## 安装
 
-```sh
-git clone https://github.com/WispW/hostnamefetch.git
-cd hostnamefetch
-
-# 方式一：复制到 PATH
-mkdir -p ~/.local/bin
-install -m 755 hostnamefetch ~/.local/bin/hostnamefetch
-
-# 方式二：软链接
-ln -s "$PWD/hostnamefetch" ~/.local/bin/hostnamefetch
-```
-
-直接运行也可以：
+一条命令安装到 `~/.local/bin`（需要该目录在 `PATH` 中）：
 
 ```sh
-./hostnamefetch
+mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21/hostnamefetch -o ~/.local/bin/hostnamefetch && chmod +x ~/.local/bin/hostnamefetch
 ```
+
+不安装、直接通过管道运行：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21/hostnamefetch | bash
+```
+
+> `v2026.11.21` tag 在 PR 合并后发布；在此之前可以把 URL 中的 tag 换成 `main`。
 
 ## 用法
 
@@ -180,7 +176,7 @@ bash tests/smoke.sh
 | --- | --- | --- |
 | ShellCheck | `ubuntu-latest` | 静态检查脚本 |
 | Ubuntu | `ubuntu-latest` | 系统 bash + 默认 awk（mawk） |
-| Windows | `windows-latest` | Git Bash；`.gitattributes` 保证脚本使用 LF 换行 |
+| Windows | `windows-latest` | pwsh 调用 Git Bash；`.gitattributes` 保证脚本使用 LF 换行 |
 | Arch Linux | `archlinux:latest` 容器 | 在 Docker 中运行同一套测试 |
 
 执行顺序固定为 ShellCheck → Ubuntu → Windows → Arch，使用 `needs` 串行；
