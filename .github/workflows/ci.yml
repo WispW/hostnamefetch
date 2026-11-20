@@ -103,3 +103,39 @@ jobs:
             --workdir /src \
             archlinux:latest \
             bash -c 'bash -n hostnamefetch && bash -n tests/smoke.sh && bash tests/smoke.sh'
+
+  macos:
+    name: macOS
+    needs: arch
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install bash
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install bash
+
+      - name: Environment
+        run: |
+          BASH5="$(brew --prefix)/bin/bash"
+          "$BASH5" --version
+          sw_vers
+          uname -a
+
+      - name: Syntax check
+        run: |
+          BASH5="$(brew --prefix)/bin/bash"
+          "$BASH5" -n hostnamefetch
+          "$BASH5" -n tests/smoke.sh
+
+      - name: Smoke tests
+        run: |
+          BASH5="$(brew --prefix)/bin/bash"
+          "$BASH5" tests/smoke.sh
+
+      - name: Sample output
+        run: |
+          BASH5="$(brew --prefix)/bin/bash"
+          "$BASH5" hostnamefetch --stdout --disable cols
