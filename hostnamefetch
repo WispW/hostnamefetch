@@ -14,7 +14,7 @@
 #
 # hostnamefetch is also licensed under the MIT License.
 
-version="2026.11.24"
+version="2026.11.24.1"
 
 # Fallback for the edge case where BASH_VERSINFO is unavailable.
 bash_version=${BASH_VERSINFO[0]:-0}
@@ -167,6 +167,15 @@ trim() {
     done
 
     printf '%s' "$s"
+}
+
+# Read a text file while dropping NUL bytes. Some sysfs/devicetree files are
+# NUL-terminated; command substitution would otherwise print a bash warning.
+read_text_file() {
+    local path=$1
+
+    [[ -r $path ]] || return 1
+    tr -d '\0' < "$path" 2>/dev/null
 }
 
 dedupe_list() {
@@ -583,7 +592,7 @@ get_model() {
                 esac
 
                 if [[ ! ${model// } && -r /sys/firmware/devicetree/base/model ]]; then
-                    model=$(< /sys/firmware/devicetree/base/model)
+                    model=$(read_text_file /sys/firmware/devicetree/base/model)
                 fi
             fi
         ;;

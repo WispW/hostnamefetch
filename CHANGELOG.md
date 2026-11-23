@@ -6,6 +6,13 @@
 
 - 暂无
 
+## [v2026.11.24.1] - 2026-11-24
+
+### 修复
+
+- 修复 ARM 板读取 `/sys/firmware/devicetree/base/model` 时 Bash 的
+  `ignored null byte in input` 警告
+
 ## [v2026.11.24] - 2026-11-24
 
 ### 新增

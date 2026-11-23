@@ -36,6 +36,17 @@ for ch in "${!GLYPHS[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
+# Sysfs/devicetree text can be NUL-terminated.
+# ---------------------------------------------------------------------------
+
+nul_file=$(mktemp)
+printf 'Rockchip RK3566 OPi 3B\0\n' > "$nul_file"
+nul_model=$(trim "$(read_text_file "$nul_file")")
+[[ $nul_model == "Rockchip RK3566 OPi 3B" ]] || \
+    fail "read_text_file should drop NUL bytes"
+rm -f "$nul_file"
+
+# ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
 
