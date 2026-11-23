@@ -1,3 +1,9 @@
+hostnamefetch (2026.11.24-1) unstable; urgency=medium
+
+  * Add Windows iwr installer with install/update/uninstall and checksum verification.
+
+ -- WispW <wispw@users.noreply.github.com>  Tue, 24 Nov 2026 12:00:00 +0000
+
 hostnamefetch (2026.11.21.1-1) unstable; urgency=medium
 
   * Add native Windows build (hostnamefetch.exe).

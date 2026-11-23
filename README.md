@@ -66,16 +66,16 @@
 一条命令安装到 `~/.local/bin`（需要该目录在 `PATH` 中）：
 
 ```sh
-mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21.1/hostnamefetch -o ~/.local/bin/hostnamefetch && chmod +x ~/.local/bin/hostnamefetch
+mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.24/hostnamefetch -o ~/.local/bin/hostnamefetch && chmod +x ~/.local/bin/hostnamefetch
 ```
 
 不安装、直接通过管道运行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21.1/hostnamefetch | bash
+curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.24/hostnamefetch | bash
 ```
 
-> `v2026.11.21.1` 在发版时创建；在此之前可把 URL 中的 tag 换成 `main`。
+> `v2026.11.24` 在发版时创建；在此之前可把 URL 中的 tag 换成 `main`。
 
 ### Debian/Ubuntu（APT）
 
@@ -98,7 +98,49 @@ sudo apt install hostnamefetch
 
 ### Windows（原生 exe）
 
-从 [Releases](https://github.com/WispW/hostnamefetch/releases/latest) 下载
+一条命令安装；如果已经安装，会自动更新到最新 Release：
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/WispW/hostnamefetch/main/windows/install.ps1 | iex
+```
+
+显式更新：
+
+```powershell
+$s = (iwr -useb https://raw.githubusercontent.com/WispW/hostnamefetch/main/windows/install.ps1).Content
+& ([scriptblock]::Create($s)) -Action Update
+```
+
+卸载：
+
+```powershell
+$s = (iwr -useb https://raw.githubusercontent.com/WispW/hostnamefetch/main/windows/install.ps1).Content
+& ([scriptblock]::Create($s)) -Action Uninstall
+```
+
+安装脚本会：
+
+- 下载最新 Release 的 `hostnamefetch.exe`
+- 从 Release 的 `hostnamefetch.exe.sha256` 或 GitHub 资产 digest 校验 SHA256，不匹配就中止
+- 默认安装到 `%LOCALAPPDATA%\Programs\hostnamefetch`
+- 把安装目录加入当前用户 `PATH`，不需要管理员权限
+- 更新时保留版本判断，已是最新版本则直接退出
+- 卸载时删除安装目录并从用户 `PATH` 移除
+
+可选参数：
+
+```powershell
+$installer = Join-Path $env:TEMP "hostnamefetch-install.ps1"
+iwr -useb https://raw.githubusercontent.com/WispW/hostnamefetch/main/windows/install.ps1 -OutFile $installer
+
+# 不修改 PATH
+& $installer -Action Install -NoPath
+
+# 强制重装当前版本
+& $installer -Action Install -Force
+```
+
+也可以从 [Releases](https://github.com/WispW/hostnamefetch/releases/latest) 手动下载
 `hostnamefetch.exe`，在终端里直接运行：
 
 ```powershell
@@ -106,7 +148,6 @@ sudo apt install hostnamefetch
 ```
 
 - 单文件，无需 bash、Git Bash、WSL 或任何运行时
-- 想在任何目录直接调用，把 exe 所在目录加入用户 `PATH`
 - 首次运行可能被 SmartScreen 拦截，选择「更多信息 → 仍要运行」
 - 信息项：Hostname、FQDN、OS、Machine、Kernel、Uptime、Shell、Terminal、
   Resolution、CPU、GPU、Memory、Local IP、Disk、色块（不显示 Packages / DE / WM）
@@ -227,7 +268,8 @@ macOS 安装 bash 5。测试覆盖：
 - 长 hostname 的分块、换行和原文重组；
 - 80 列终端下不溢出、信息列对齐；
 - 垂直居中、CLI 参数校验和 `--stdout` 输出；
-- macOS `system_profiler` 缓存、内存回退与窄终端警告。
+- macOS `system_profiler` 缓存、内存回退与窄终端警告；
+- Windows 安装脚本的安装、更新和卸载。
 
 如果希望 PR 在任一检查失败时禁止合并，还需要在仓库
 Settings → Branches 中把这五个 job 设为 required status checks；

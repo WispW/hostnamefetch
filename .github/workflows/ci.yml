@@ -142,6 +142,33 @@ jobs:
           # step would inherit that as its own exit code and fail.
           exit 0
 
+      - name: Installer test
+        working-directory: windows
+        run: |
+          $exe = Join-Path $PWD "hostnamefetch.exe"
+          $sum = Join-Path $PWD "hostnamefetch.exe.sha256"
+          $installer = Join-Path $PWD "install.ps1"
+          $installDir = Join-Path $env:RUNNER_TEMP "hostnamefetch-install-test"
+
+          $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText($sum, "$hash  hostnamefetch.exe" + [Environment]::NewLine, [Text.Encoding]::ASCII)
+
+          Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue
+
+          & $installer -Action Install -InstallDir $installDir -NoPath -AssetPath $exe -ChecksumPath $sum
+          if (-not (Test-Path -LiteralPath (Join-Path $installDir "hostnamefetch.exe"))) {
+            throw "installer did not create hostnamefetch.exe"
+          }
+
+          & (Join-Path $installDir "hostnamefetch.exe") --version
+          if ($LASTEXITCODE -ne 0) { throw "installed exe --version failed" }
+
+          & $installer -Action Update -InstallDir $installDir -NoPath -AssetPath $exe -ChecksumPath $sum -Force
+          & $installer -Action Uninstall -InstallDir $installDir -NoPath
+          if (Test-Path -LiteralPath $installDir) {
+            throw "installer did not remove install directory"
+          }
+
   arch:
     name: Arch Linux (container)
     needs: windows

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Source tag to publish, e.g. v2026.11.21.1'
+        description: 'Source tag to publish, e.g. v2026.11.24'
         required: true
         type: string
 
@@ -62,10 +62,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "--stdout failed" }
           if (-not ($rows -match '^Hostname: ')) { throw "missing Hostname row" }
 
+      - name: Checksum
+        run: |
+          $exe = Join-Path $PWD 'windows\hostnamefetch.exe'
+          $sum = Join-Path $PWD 'windows\hostnamefetch.exe.sha256'
+          $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText($sum, "$hash  hostnamefetch.exe" + [Environment]::NewLine, [Text.Encoding]::ASCII)
+          Get-Content -LiteralPath $sum
+
       - name: Attach to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload $env:TAG (Join-Path $PWD 'windows\hostnamefetch.exe') `
+          gh release upload $env:TAG `
+            (Join-Path $PWD 'windows\hostnamefetch.exe') `
+            (Join-Path $PWD 'windows\hostnamefetch.exe.sha256') `
             --repo $env:GITHUB_REPOSITORY `
             --clobber
