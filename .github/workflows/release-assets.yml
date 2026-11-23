@@ -1,0 +1,42 @@
+name: Publish release assets
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish, e.g. v2026.11.24'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-assets-${{ github.event.release.tag_name || github.event.inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Attach hostnamefetch script
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Upload hostnamefetch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -f hostnamefetch
+          gh release upload "$TAG" hostnamefetch \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
