@@ -3,3 +3,4 @@ AGENTS.md
 
 # Go build output
 windows/hostnamefetch.exe
+windows/hostnamefetch.exe.sha256

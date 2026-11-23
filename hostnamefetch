@@ -14,7 +14,7 @@
 #
 # hostnamefetch is also licensed under the MIT License.
 
-version="2026.11.21.1"
+version="2026.11.24"
 
 # Fallback for the edge case where BASH_VERSINFO is unavailable.
 bash_version=${BASH_VERSINFO[0]:-0}

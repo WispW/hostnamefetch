@@ -6,6 +6,14 @@
 
 - 暂无
 
+## [v2026.11.24] - 2026-11-24
+
+### 新增
+
+- Windows `iwr` 安装脚本：支持安装、更新和卸载
+- 安装脚本校验 `hostnamefetch.exe` 的 SHA256（Release `.sha256` 或 GitHub 资产 digest）
+- Windows Release 自动附带 `hostnamefetch.exe.sha256`
+
 ## [v2026.11.21.1] - 2026-11-21
 
 ### 新增
