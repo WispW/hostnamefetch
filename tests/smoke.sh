@@ -36,6 +36,28 @@ for ch in "${!GLYPHS[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
+# Sysfs/devicetree text can be NUL-terminated.
+# ---------------------------------------------------------------------------
+
+nul_file=$(mktemp)
+nul_out=$(mktemp)
+nul_err=$(mktemp)
+printf 'Rockchip RK3566 OPi 3B\0\n' > "$nul_file"
+
+read_text_file "$nul_file" > "$nul_out" 2> "$nul_err" || \
+    fail "read_text_file failed on a NUL-terminated file"
+
+nul_text=$(cat "$nul_out")
+[[ $nul_text == "Rockchip RK3566 OPi 3B" ]] || \
+    fail "read_text_file should drop NUL bytes"
+(( $(wc -c < "$nul_out") == 23 )) || \
+    fail "read_text_file output should be 23 bytes after dropping NUL"
+[[ ! -s $nul_err ]] || \
+    fail "read_text_file should not write a NUL warning to stderr"
+
+rm -f "$nul_file" "$nul_out" "$nul_err"
+
+# ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
 

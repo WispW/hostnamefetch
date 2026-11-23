@@ -8,7 +8,7 @@ import (
 
 // version is overridden at build time with
 // -ldflags "-X main.version=<tag>".
-var version = "2026.11.24"
+var version = "2026.11.24.1"
 
 type config struct {
 	banner        string
