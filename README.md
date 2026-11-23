@@ -82,6 +82,8 @@ curl -fsSL https://raw.githubusercontent.com/WispW/hostnamefetch/v2026.11.21.1/h
 已提供第三方 APT 源：<https://repo.wennie99s.top>
 
 ```sh
+sudo apt install curl
+
 sudo install -d -m 0755 /etc/apt/keyrings
 
 curl -fsSL https://repo.wennie99s.top/wispw-archive-keyring.gpg \
